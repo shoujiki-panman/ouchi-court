@@ -108,7 +108,7 @@ async function panelVote(env, j, record) {
 }
 
 // 判決：判例を引く → 3人の判事が票を入れる → 裁判長タヌキがまとめて言い渡す → 判例集に記録する
-async function verdict(env, { record, names }) {
+async function verdict(env, { record, names, winner: forced, points }) {
   const client = await mcp(env);
   const [prec, ...votes] = await Promise.all([
     names?.length ? client.callTool("get_precedents", { names }).then(textOf).catch(() => "No precedents.") : "No precedents.",
@@ -119,11 +119,13 @@ async function verdict(env, { record, names }) {
     ),
   ]);
   // 票を数えて結論はコードが決める（AI に数えさせたら「引き分け2・ハナ1」を「2対1でハナ」と読み違えた 10/15）
+  // ひとりで挑戦は点数で勝ち負けが決まる（票がちがうと「何も話していないのに勝った」になった 10/16）
+  if (forced) for (const v of votes) v.vote = forced;
   const count = new Map();
   for (const v of votes) count.set(v.vote, (count.get(v.vote) ?? 0) + 1);
   const [top, n] = [...count.entries()].sort((a, b) => b[1] - a[1])[0] ?? ["draw", 0];
-  const decided = n >= 2 ? top : "draw";
-  const score = decided === "draw" ? (n >= 2 ? `${n}対${votes.length - n}で和解（引き分け）` : "票が割れたので和解（引き分け）") : `${n}対${votes.length - n}で${decided}の勝ち`;
+  const decided = forced ?? (n >= 2 ? top : "draw");
+  const score = forced ? (forced === "draw" ? `点数 ${points} で引き分け` : `点数 ${points} で${forced}の勝ち`) : decided === "draw" ? (n >= 2 ? `${n}対${votes.length - n}で和解（引き分け）` : "票が割れたので和解（引き分け）") : `${n}対${votes.length - n}で${decided}の勝ち`;
   const tally = `${votes.map((v) => `${v.title}: ${v.vote === "draw" ? "和解" : `${v.vote}の勝ち`}（${v.reason}）`).join("\n")}\n結論（変えないこと）: ${score}`;
   const out = await gemini(env, env.JUDGE_MODEL, {
     systemInstruction: { parts: [{ text: JUDGE_PROMPT }] },

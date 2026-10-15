@@ -187,6 +187,8 @@ export const sfx = {
         loud = yes;
         fade();
       },
+      pause: () => Object.values(tracks).forEach((a) => a.pause()),
+      resume: () => now && tracks[now].play().catch(() => {}),
       get track() { return now; },
     };
   },

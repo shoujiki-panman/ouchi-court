@@ -41,7 +41,7 @@ const SOLO = (topic, side, rv) => `あなたは「おうち裁判 ひとりで�
 1. 開廷！ルールを一言で。子どもに名前を聞き「〇〇さんですね？」と確かめる。
 2. お題の説明を2〜3文で（上の説明を使う）。賛成・反対の例を1つずつ言い、「ラウンド1！${side}側の〇〇さん、どう思う？」と聞く。
 3. 各ラウンド: 子どもが意見を言う → 採点の知らせが届いたら1文だけ実況 → 知らせの指示どおりに進める。アドバイスや説明は試合中にしない（白熱させる）。
-キャラの話し分け（画面のキャラが切りかわる合図なので必ず守る）: コン太として話すときは「コン太だ！」で始め、生意気で早口な声。ポン子として話すときは「ポン子です！」で始め、明るく高い声。司会に戻るときだけ「タヌ吉です！」と言う（コン太やポン子が話したあと以外では名乗らない）。コン太とポン子は1回に1〜2文だけ。
+コン太とポン子のセリフは、画面が別の声で話す。あなたは司会のタヌ吉だけを演じ、コン太やポン子のセリフは言わない（「コン太の反論は…」と代わりに言わない）。
 4. 「試合終了」の知らせが来たら「勝負あり！」とだけ言う。判決は画面が始めるので、ひとりで挑戦では call_judge を呼ばない（自分でラウンドを数えて終わらせない。採点の知らせが来るまで次へ進まない）。
 5. 判決と罰ゲームのあと「これにて閉廷！」。
 守ること: 子どもが話している途中で口をはさまない。子どもを言い負かして終わらせない。考えを言えたことを必ずほめる。日本語で話す。`;
@@ -146,8 +146,45 @@ function onStage(id, text, { fresh = false } = {}) {
   });
 }
 const talk = (on) => $("hero").classList.toggle("talk", on);
+// コン太とポン子は、AIの司会とは別の声で、こちらから話させる（10/16「他のキャラが喋らない・切り替わらない」）
+// 声は AivisSpeech で作っておいた決めゼリフ（public/voice/）。ブラウザの読み上げは声が変だった（10/16）
+// 長いセリフは文字だけ出して、頭に短い決めゼリフの声を入れる（ダンガンロンパも一部だけ声が入る）
+let npcTalking = false;
+const NPC_LINES = {
+  lawyerD: { objection: "異議あり！", doukana: "それはどうかな？", chotto: "ちょっと待った！その意見には穴があるよ！", gunu: "ぐぬぬ……！そこを突かれるとは……！", iisugi: "くっ、今のはちょっと言いすぎたか……！", madamada: "まだまだ！次のラウンドで取り返してやる！", kuzurenai: "ふふん、ぼくの言い分は崩れないよ！", dousita: "どうした？撃ち抜けなかったみたいだね！", zannen: "残念！ぼくの勝ちが近づいてきたかな？", hantai: "でも、反対の理由だってちゃんとあるんだよ！", chigau: "本当にそうかな？ぼくはちがうと思うね！" },
+  lawyerP: { nice: "ナイス論破！バッチリ効いたね！", kimatta: "それは違うよ、決まったー！その調子！", sugoi: "すごい！コン太の弱いところ、ちゃんと見抜いたね！", daijoubu: "だいじょうぶ！次で取り返そう！", oshii: "おしい！黄色いところをよく見てね！", gyakuten: "まだ逆転できるよ、がんばって！" },
+};
+// key: 決めゼリフ（声あり）。text を渡すと、声は key、画面の文字は text
+function npcSay(id, key, text) {
+  const line = text ?? NPC_LINES[id][key];
+  onStage(id, line, { fresh: true });
+  note(CAST[id].name, line);
+  closeNote();
+  if (paused) return new Promise((r) => setTimeout(r, 1200));
+  return new Promise((done) => {
+    const a = new Audio(`voice/${id === "lawyerD" ? "kon" : "pon"}-${key}.mp3`);
+    a.volume = 0.95;
+    let ended = false;
+    const end = () => {
+      if (ended) return;
+      ended = true;
+      npcTalking = false;
+      talk(false);
+      // 文字だけの続きがあるときは、読む時間を少し置く
+      setTimeout(done, text ? Math.min(2500, text.length * 60) : 250);
+    };
+    a.onended = end;
+    a.onerror = end;
+    npcTalking = true;
+    talk(true);
+    beat?.loud(false);
+    a.play().catch(end);
+    setTimeout(end, 6000);
+  });
+}
+const pick = (a) => a[Math.floor(Math.random() * a.length)];
 (function lipsync() {
-  const amp = speaker ? speaker.level() : 0;
+  const amp = npcTalking ? 0.25 + 0.35 * Math.abs(Math.sin(performance.now() / 90)) : speaker ? speaker.level() : 0;
   $("hero").style.setProperty("--amp", amp.toFixed(3));
   document.querySelector(".seat.on")?.style.setProperty("--amp", amp.toFixed(3));
   requestAnimationFrame(lipsync);
@@ -326,7 +363,7 @@ async function openCourt(resume = false) {
           live.send({ clientContent: { turns: [{ role: "user", parts: [{ text: restart }] }], turnComplete: true } });
           try {
             stopMic = await startMic((b64, lvl) => {
-              if (judging || paused) return;
+              if (judging || paused || npcTalking) return;
               live.audio(b64);
             });
             status("開廷中：そのまま話しかけてください");
@@ -384,7 +421,6 @@ async function openCourt(resume = false) {
           const named = /ポン子(です|よ！|だよ)|弁護人ポン子/.test(tail) ? "lawyerP" : /コン太(です|だ！|だよ|様)|弁護人コン太/.test(tail) ? "lawyerD" : /タヌ吉(です|だよ)|書記官タヌ吉/.test(tail) ? "bailiff" : null;
           const id = named ?? (speakingTurn.length === t.length ? "bailiff" : who);
           // 声の高さもキャラごとに変える（音声は文字起こしとほぼ同じ順で届くので、名乗った所から切りかわる）
-          if (speaker) speaker.rate = { lawyerD: 1.13, lawyerP: 1.24 }[id] ?? 1;
           if (who !== id) {
             speakingTurn = t;
             onStage(id, t, { fresh: true });
@@ -400,7 +436,7 @@ async function openCourt(resume = false) {
           dbg.tc++;
           if (speaker) speaker.rate = 1; // 次の番は書記官の声から
           speakingTurn = "";
-          if (mode === "solo") $("turnBtn").style.display = "inline-block";
+
           setTimeout(() => !speaker.busy && beat?.loud(false), 600);
           closeNote();
           setTimeout(() => !speaker.busy && talk(false), 400);
@@ -455,7 +491,9 @@ async function judge(call) {
     const soloNote = mode === "solo" ? `（ひとりで挑戦モード: お題「${topic?.motion}」。ポイント あなた${soloScore.player} - ${soloScore.rival}コン太（多い方を勝ちにする）。子ども=${parties[0] ?? "プレイヤー"}（${side}）vs 弁護人コン太（反対側）。子どもの理由の良さで判定する。勝ち負けは子ども名か「コン太」で）\n` : "";
     const lean = balanceVal < -20 ? `${parties[0]}さん寄り` : balanceVal > 20 ? `${parties[1]}さん寄り` : "五分五分";
     const text = `${soloNote}原告: ${parties[0]} / 被告: ${parties[1]} / 法廷の天秤: ${lean}（${balanceVal}）\n${call.args?.summary ?? ""}\n\n${record.map((r) => `${r.who}: ${r.text}`).join("\n")}`.slice(-6000);
-    const v = await api("/api/verdict", { record: text, names, evidence: evidence.map((e) => e.label) });
+    // ひとりで挑戦は、点数で勝ち負けを決めて判事に伝える
+    const soloWinner = mode !== "solo" ? undefined : soloScore.player > soloScore.rival ? names[0] : soloScore.player < soloScore.rival ? "コン太" : "draw";
+    const v = await api("/api/verdict", { record: text, names, evidence: evidence.map((e) => e.label), winner: soloWinner, points: `${soloScore.player}対${soloScore.rival}` });
     let soloResult = null, penaltyImg = null;
     if (mode === "solo") {
       clearInterval(soloClock);
@@ -688,11 +726,12 @@ function togglePause() {
   $("pauseBtn").querySelector("span").textContent = paused ? "▶ 再開" : "⏸ 一時停止";
   if (paused) {
     speaker?.stop();
-    beat?.loud(false);
+    beat?.pause?.();
     talk(false);
     status("一時停止中");
   } else {
     status("開廷中");
+    beat?.resume?.();
     live.send({ clientContent: { turns: [{ role: "user", parts: [{ text: "（一時停止から再開しました。今どこまで進んでいたかを一言で言って、続きから進めてください）" }] }], turnComplete: true } });
   }
 }
@@ -721,7 +760,6 @@ function beginTurn() {
   quietSince = 0;
   turnLeft = stepNow >= 3 ? 45 : 20;
   live.send({ realtimeInput: { activityStart: {} } });
-  $("turnBtn").style.display = "inline-block";
   beat?.loud(false);
   clearInterval(turnTimer);
   turnTimer = setInterval(() => {
@@ -766,6 +804,7 @@ const BADGES = [
   { id: "news", icon: "🗞️", name: "ニュース通", how: "いま話題のお題で勝つ", ok: (g) => g.win && g.news },
   { id: "both", icon: "🌈", name: "どっちも言える", how: "賛成と反対の両方で勝つ", ok: (g) => g.sidesWon.includes("賛成") && g.sidesWon.includes("反対") },
   { id: "lv5", icon: "👑", name: "コン太Lv5撃破", how: "Lv5のコン太に勝つ", ok: (g) => g.win && g.level >= 5 },
+  { id: "share", icon: "📣", name: "挑戦状", how: "友だちに挑戦状を送る", ok: () => false },
 ];
 const store = {
   get: (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } },
@@ -787,6 +826,12 @@ function showShelf() {
   const next = BADGES.find((b) => !have.includes(b.id));
   $("badgeShelf").innerHTML = BADGES.map((b) => `<span class="b ${have.includes(b.id) ? "" : "off"}" title="${b.name}：${b.how}">${have.includes(b.id) ? b.icon : "？"}</span>`).join("") +
     `<div class="next">バッジ ${have.length}/${BADGES.length}${next ? `｜つぎ：${next.icon} ${next.how}` : "｜ぜんぶ集めた！"}</div>`;
+  const hist = store.get("ouchi.history", []);
+  if (hist.length)
+    $("badgeShelf").innerHTML += `<details class="hist"><summary>📜 これまでの試合（${hist.length}回）</summary>${hist
+      .slice(0, 8)
+      .map((h) => `<div>${new Date(h.at).toLocaleDateString("ja-JP")} ${{ win: "🏆", lose: "💧", draw: "🤝" }[h.result] ?? ""} ${h.me}-${h.rival}｜${h.topic}（${h.side}）</div>`)
+      .join("")}</details>`;
 }
 showShelf();
 function showSoloScore() {
@@ -900,19 +945,33 @@ async function soloPoint(r, statement) {
     setTimeout(() => judge({ name: "call_judge", id: null, args: {} }), 3500);
   }
   step(end.startsWith("試合終了") ? "verdict" : `r${Math.min(rounds + 1, 3)}`);
-  // 次のラウンドの前に、ノンストップ議論（コン太の反論を画面に流し、子どもがコトダマで撃ち抜く）
+  // 次のラウンドの前に：コン太が言い返す（ノンストップ議論があれば画面で撃ち抜く）→ ポン子がひとこと → 司会が次へ
   const debateNext = !end && bullets.length > 0;
   const nextCue = `「ラウンド${rounds + 1}！」${rounds + 1 === 3 ? "（最終ラウンド！得点2倍と言って煽る）" : ""}`;
-  live?.send({ clientContent: { turns: [{ role: "user", parts: [{ text: `（ラウンド${rounds}の採点: 子ども+${me}（${parts.join("・")}）、コン太+${rival}。合計 あなた${soloScore.player} - ${soloScore.rival}コン太。理由「${r.why}」。${end || (debateNext ? "実況は1文だけ。このあと画面で「ノンストップ議論」が始まる（コン太の反論は画面に流れる）。結果の知らせが来るまで黙って待つ。" : `実況は1文だけで、「コン太だ！」で始めて反論を1つ短く → 「タヌ吉です！」で ${nextCue}へ。テンポよく、白熱させて。`)}）` }] }], turnComplete: true } });
-  if (!debateNext) return;
-  const d = await api("/api/debate", { topic: topic?.motion, side, statement, bullets, level: rivalInfo.level }).catch(() => null);
-  const out = d?.lines?.length ? await nonstopDebate(d) : null;
-  const msg = !out
-    ? `（「コン太だ！」で始めて反論を1つ短く、「タヌ吉です！」で ${nextCue}へ）`
-    : out.hit
-      ? `（ノンストップ議論の結果：子どもがコン太側の「${out.weak}」を、コトダマ「${out.bullet}」で${out.full ? "撃ち抜いて論破！大成功" : "撃ち抜いた！（惜しい、もっと合うコトダマもあった）"}。+${out.pts}点で、合計 あなた${soloScore.player} - ${soloScore.rival}コン太。まず「ポン子です！」で論破をほめる一言、次に「コン太だ！」で悔しがる一言、最後に「タヌ吉です！」で ${nextCue}へ）`
-      : `（ノンストップ議論の結果：論破ならず。「コン太だ！」で始めて「${d.lines[0].text}」と得意げに言い張り、「ポン子です！」で子どもを励ます一言、「タヌ吉です！」で ${nextCue}へ）`;
-  live?.send({ clientContent: { turns: [{ role: "user", parts: [{ text: msg }] }], turnComplete: true } });
+  live?.send({ clientContent: { turns: [{ role: "user", parts: [{ text: `（ラウンド${rounds}の採点: 子ども+${me}（${parts.join("・")}）、コン太+${rival}。合計 あなた${soloScore.player} - ${soloScore.rival}コン太。理由「${r.why}」。${end || "実況は1文だけ。このあとコン太とポン子が話す（画面が話す）ので、知らせが来るまで黙って待つ。"}）` }] }], turnComplete: true } });
+  if (end) return;
+  await waitClerk();
+  const d = debateNext ? await api("/api/debate", { topic: topic?.motion, side, statement, bullets, level: rivalInfo.level }).catch(() => null) : null;
+  if (d?.lines?.length) {
+    const out = await nonstopDebate(d);
+    if (out.hit) {
+      await npcSay("lawyerP", pick(["nice", "kimatta", "sugoi"]));
+      await npcSay("lawyerD", pick(["gunu", "iisugi", "madamada"]));
+    } else {
+      await npcSay("lawyerD", pick(["kuzurenai", "dousita", "zannen"]));
+      await npcSay("lawyerP", pick(["daijoubu", "oshii", "gyakuten"]));
+    }
+  } else {
+    const said = String(r.line ?? "").replace(/^異議あり！?/, "");
+    const k = pick(["doukana", "objection"]);
+    await (said ? npcSay("lawyerD", k, `${NPC_LINES.lawyerD[k]}${said}`) : npcSay("lawyerD", pick(["hantai", "chigau"])));
+  }
+  live?.send({ clientContent: { turns: [{ role: "user", parts: [{ text: `（コン太とポン子はもう話しました。あなたは司会として、今の流れを受けて ${nextCue} と短く言い、子どもに聞いてください）` }] }], turnComplete: true } });
+}
+// 司会が話し終わるまで待つ（最長10秒）
+async function waitClerk() {
+  await new Promise((r) => setTimeout(r, 1200));
+  for (let i = 0; i < 50 && speaker?.busy; i++) await new Promise((r) => setTimeout(r, 200));
 }
 
 // 証拠品＝ヒントカード：AIが開廷前に作っておく。試合中もお題の下に出して、話すときのヒントにする（10/16 本人案）
@@ -941,7 +1000,7 @@ async function nonstopDebate(d) {
   $("stage").classList.add("debate");
   await banner("ノンストップ議論 開始！");
   drawCylinder(true);
-  onStage("lawyerD", "コトダマを選んで、黄色いウィークポイントを撃ち抜け！", { fresh: true });
+  npcSay("lawyerD", pick(["chotto", "doukana", "objection"]), d.lines[0].text).then(() => onStage("lawyerD", "コトダマを選んで、黄色いウィークポイントを撃ち抜け！", { fresh: true }));
   heat(25);
   let done, missed = 0;
   const finish = new Promise((r) => (done = r));
@@ -1029,6 +1088,7 @@ function startSoloClock() {
   clearInterval(soloClock);
   soloLeft = 180;
   soloClock = setInterval(() => {
+    if (paused || npcTalking) return;
     soloLeft--;
     $("feverClock").textContent = `のこり ${Math.floor(soloLeft / 60)}:${String(soloLeft % 60).padStart(2, "0")}`;
     if (soloLeft <= 0) {
@@ -1102,31 +1162,156 @@ async function adjourn() {
 async function resultCard(result, v) {
   const rv = rivalInfo;
   const newBadges = earnBadges(result);
+  // 試合の記録をこの端末に残す（タイトルの「これまでの試合」に出る）
+  const hist = store.get("ouchi.history", []);
+  hist.unshift({ at: Date.now(), topic: topic?.motion ?? "", side, result, me: soloScore.player, rival: soloScore.rival, best: best.text });
+  store.set("ouchi.history", hist.slice(0, 50));
   const rivalLine = result === "win" ? `くっ…次は負けないぞ！（コン太 Lv${Math.min(5, (rv.level ?? 1))} にパワーアップ）` : result === "lose" ? "ふふん、ぼくの勝ち！でもいい勝負だったよ" : "引き分けか…次こそ決着をつけよう！";
+  const title = v?.stamp ?? { win: "勝訴！", lose: "敗訴…", draw: "引き分け" }[result];
+  // 友だちの挑戦状から来た人には、相手の点とくらべる
+  const vsFriend = challenge && challenge.topic === topic?.motion ? `<div class="rf display">挑戦状の ${challenge.score}点 → あなた ${soloScore.player}点：${soloScore.player > challenge.score ? "🎉 超えた！" : soloScore.player === challenge.score ? "🤝 同点！" : "💧 あと少し！"}</div>` : "";
+  // 結果カードは大事なものだけ。くわしくは開いたときだけ（10/16「ごちゃついてわかりにくい」）
   $("result").innerHTML = `<div class="card">
-    <div class="rt display">${{ win: "勝訴！", lose: "敗訴…", draw: "引き分け" }[result]}</div>
+    <div class="rt display">${title}</div>
     <div class="rs display">あなた ${soloScore.player} - ${soloScore.rival} コン太</div>
-    <div class="rq">お題：${topic?.motion ?? ""}（あなたは${side}）</div>
-    <div class="rq">内訳：理由 ${breakdown.reason}｜具体例 ${breakdown.example}｜反論に答えた ${breakdown.counter}｜論破 ${breakdown.ronpa}｜使い回し ${breakdown.repeat}｜ラウンド勝ち ${roundWins.player}/${rounds}${suddenDeath ? "｜サドンデス" : ""}${extraRound ? "｜延長戦" : ""}</div>
+    ${vsFriend}
     ${newBadges.length ? `<div class="nb display">NEW バッジ！ ${newBadges.map((b) => `${b.icon} ${b.name}`).join("　")}</div>` : ""}
-    <div class="rb"><b>きょうの名言</b>「${best.text || "（また次回！）"}」</div>
-    <div class="rc"><img src="img/lawyerP.png" alt=""><span><b>ポン子の作戦メモ（次はこうすると強いよ）</b>${hints.length ? hints.slice(-2).map((h) => `・${h}`).join("<br>") : "考えを自分の言葉で言えたのがすごい！"}</span></div>
-    <div class="rc"><img src="img/lawyerD.png" alt=""><span><b>ライバル コン太</b>${rivalLine}</span></div>
-    <div class="rp display">論破力 ${points}pt｜通算 ${rv.wins ?? 0}勝 ${rv.losses ?? 0}敗</div>
-    <div class="rbtns"><button id="shareX" class="display"><span>𝕏 「どっち派？」でシェア</span></button><button id="resultClose" class="sub"><span>とじる</span></button></div></div>`;
+    <div class="rc"><img src="img/lawyerD.png" alt=""><span>${rivalLine}</span></div>
+    <div class="rbtns"><button id="shareX" class="display"><span>📣 友だちに挑戦状を送る</span></button><button id="again" class="display gold"><span>もう一回！</span></button></div>
+    <div id="shareNote" class="rq"></div>
+    <details class="more"><summary>くわしく見る（内訳・作戦メモ・名言）</summary>
+      <div class="rq">お題：${topic?.motion ?? ""}（あなたは${side}）</div>
+      <div class="rq">内訳：理由 ${breakdown.reason}｜具体例 ${breakdown.example}｜反論に答えた ${breakdown.counter}｜論破 ${breakdown.ronpa}｜使い回し ${breakdown.repeat}｜ラウンド勝ち ${roundWins.player}/${rounds}${suddenDeath ? "｜サドンデス" : ""}${extraRound ? "｜延長戦" : ""}</div>
+      <div class="rb"><b>きょうの名言</b>「${best.text || "（また次回！）"}」</div>
+      <div class="rc"><img src="img/lawyerP.png" alt=""><span><b>ポン子の作戦メモ（次はこうすると強いよ）</b>${hints.length ? hints.slice(-2).map((h) => `・${h}`).join("<br>") : "考えを自分の言葉で言えたのがすごい！"}</span></div>
+      <div class="rp">通算 ${rv.wins ?? 0}勝 ${rv.losses ?? 0}敗</div>
+      <button id="saveLog" class="mini">💾 記録を保存</button>
+    </details>
+    <button id="resultClose" class="mini">とじる</button></div>`;
   $("result").classList.add("on");
   sfx.fanfare(speaker.ctx);
   $("resultClose").onclick = () => $("result").classList.remove("on");
-  // X でシェア：投稿するかは本人が決める（画面を開くだけ）。名前や名言は入れず、お題と勝ち負けだけ
-  $("shareX").onclick = () => {
-    const outcome = { win: "勝訴！", lose: "敗訴…くやしい！", draw: "引き分け！" }[result];
-    const text = `お題「${topic?.motion ?? ""}」\nわたしは【${side}】派で、AIライバルのコン太と対決して ${soloScore.player}-${soloScore.rival} で${outcome}\n\nあなたはどっち派？ 👍賛成 / 👎反対\n#おうち裁判`;
-    const url = `${location.origin}/?t=${encodeURIComponent(topic?.motion ?? "")}`;
-    window.open(`https://x.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`, "_blank", "noopener");
+  $("again").onclick = () => {
+    $("result").classList.remove("on");
+    closeCourt();
+    setTimeout(() => $("solo").click(), 1700);
+  };
+  // 記録を文字のファイルで保存（お題・点数・会話の全文）
+  $("saveLog").onclick = () => {
+    const d = new Date();
+    const head = `おうち裁判の記録 ${d.toLocaleString("ja-JP")}\nお題：${topic?.motion ?? ""}（${side}）\n結果：${{ win: "勝訴", lose: "敗訴", draw: "引き分け" }[result]} あなた ${soloScore.player} - ${soloScore.rival} コン太\nきょうの名言：${best.text}\n\n`;
+    download(new Blob([head + record.map((x) => `${x.who}: ${x.text}`).join("\n")], { type: "text/plain" }), `おうち裁判_${d.toISOString().slice(0, 10)}.txt`);
+  };
+  // 挑戦状：結果の画像＋同じお題で遊べるリンク。投稿するかは本人が決める（画面を開くだけ）。名前や名言は入れない
+  $("shareX").onclick = async () => {
+    const url = `${location.origin}/?t=${encodeURIComponent(topic?.motion ?? "")}&c=${soloScore.player}`;
+    const text = `【おうち裁判 挑戦状】\nお題「${topic?.motion ?? ""}」\nわたしは【${side}】派で、AIライバルのコン太に ${soloScore.player}-${soloScore.rival} で${title}\nこの${soloScore.player}点、超えられる？ あなたはどっち派？\n#おうち裁判`;
+    const png = await shareImage(title, url);
+    const file = png && new File([png], "ouchi-court.png", { type: "image/png" });
+    earnShareBadge();
+    // スマホ：共有メニューで画像つきで送れる
+    if (file && navigator.canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], text: `${text}\n${url}` });
+        return;
+      } catch {}
+    }
+    // パソコン：画像を保存し、文もコピーして、X の投稿画面を開く（画像は貼り付けてもらう）
+    if (png) download(png, "おうち裁判_挑戦状.png");
+    try {
+      await navigator.clipboard.writeText(`${text}\n${url}`);
+    } catch {}
+    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`, "_blank");
+    $("shareNote").textContent = "挑戦状の画像を保存して、文もコピーしました。Xの投稿画面に画像を貼ってね。";
   };
   await new Promise((r) => setTimeout(r, 1200));
 }
 
+function download(blob, name) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+// 挑戦状の画像（1200×630。Xのカードの大きさ）
+async function shareImage(title, url) {
+  try {
+    await document.fonts.load('64px "Dela Gothic One"');
+    const c = document.createElement("canvas");
+    c.width = 1200;
+    c.height = 630;
+    const g = c.getContext("2d");
+    g.fillStyle = "#0b0612";
+    g.fillRect(0, 0, 1200, 630);
+    g.save();
+    g.translate(600, 315);
+    g.rotate(-0.18);
+    for (let x = -1400; x < 1400; x += 60) {
+      g.fillStyle = x % 120 === 0 ? "rgba(255,79,163,.22)" : "rgba(138,63,252,.14)";
+      g.fillRect(x, -120, 30, 240);
+    }
+    g.restore();
+    const kon = await new Promise((r) => {
+      const i = new Image();
+      i.onload = () => r(i);
+      i.onerror = () => r(null);
+      i.src = "img/lawyerD.png";
+    });
+    if (kon) g.drawImage(kon, 860, 230, 320, 320);
+    const font = (px) => `${px}px "Dela Gothic One", sans-serif`;
+    const outline = (t, x, y, px, fill, stroke = "#000") => {
+      g.font = font(px);
+      g.lineWidth = px / 7;
+      g.strokeStyle = stroke;
+      g.strokeText(t, x, y);
+      g.fillStyle = fill;
+      g.fillText(t, x, y);
+    };
+    outline("おうち裁判", 56, 96, 60, "#fff", "#ff4fa3");
+    outline("挑戦状", 420, 96, 40, "#ffd23f");
+    g.save();
+    g.translate(330, 250);
+    g.rotate(-0.12);
+    g.fillStyle = "#ff4fa3";
+    g.fillRect(-270, -78, 540, 130);
+    g.strokeStyle = "#fff";
+    g.lineWidth = 8;
+    g.strokeRect(-270, -78, 540, 130);
+    g.textAlign = "center";
+    outline(title, 0, 30, 92, "#fff");
+    g.restore();
+    outline(`あなた ${soloScore.player} - ${soloScore.rival} コン太`, 60, 400, 52, "#fff");
+    g.font = font(30);
+    g.fillStyle = "#ffd23f";
+    const t = `お題「${topic?.motion ?? ""}」`;
+    g.fillText(t.length > 24 ? `${t.slice(0, 23)}…」` : t, 60, 470);
+    g.fillStyle = "#fff";
+    g.fillText(`【${side}】派の${soloScore.player}点、超えられる？`, 60, 520);
+    g.font = '24px sans-serif';
+    g.fillStyle = "#c9b8e0";
+    g.fillText(url.replace(/^https?:\/\//, "").split("?")[0], 60, 590);
+    return await new Promise((r) => c.toBlob(r, "image/png"));
+  } catch {
+    return null;
+  }
+}
+// 挑戦状のリンク（?t=お題&c=点数）から来た人
+const challenge = (() => {
+  const q = new URLSearchParams(location.search);
+  const sc = Number(q.get("c"));
+  return q.get("t") && Number.isFinite(sc) && q.has("c") ? { topic: q.get("t").slice(0, 40), score: sc } : null;
+})();
+if (challenge) {
+  const el = document.createElement("div");
+  el.className = "challenge display";
+  el.textContent = `📣 挑戦状がとどいた！「${challenge.topic}」で ${challenge.score}点。超えられる？`;
+  $("intro").insertBefore(el, $("solo"));
+}
+function earnShareBadge() {
+  const have = store.get("ouchi.badges", []);
+  if (!have.includes("share")) store.set("ouchi.badges", [...have, "share"]);
+}
 // 投票タイム：3人の判事の票をスロットで回して、1つずつ止める
 async function voteTime(panel) {
   $("reels").innerHTML = panel.map((p, i) => `<div class="reel spin" id="reel${i}"><small>${p.title}</small><div class="val display">？？？</div><div class="why"></div></div>`).join("");
@@ -1353,9 +1538,13 @@ $("solo").onclick = async () => {
       $("topicList").querySelector(".topic").classList.add("chosen");
     };
     $("topics").innerHTML =
-      `<div class="pickRow"><span class="pick">お題をえらんでね</span><button id="shuffle" class="mini">🔀 ほかのお題</button></div><div id="topicList"></div>` +
+      `<div class="pickRow"><button id="topicBack" class="mini">← もどる</button><span class="pick">お題をえらんでね</span><button id="shuffle" class="mini">🔀 ほかのお題</button></div><div id="topicList"></div>` +
       `<div class="sides"><button class="side" data-s="賛成"><span>👍 賛成で戦う</span></button><button class="side sub" data-s="反対"><span>👎 反対で戦う</span></button></div>`;
     draw();
+    $("topicBack").onclick = () => {
+      $("topics").style.display = "none";
+      $("intro").classList.remove("hide");
+    };
     $("shuffle").onclick = () => {
       page++;
       draw();
@@ -1428,6 +1617,7 @@ if (new URLSearchParams(location.search).has("debug")) {
     },
     ronpa: () => ronpa(),
     glitch: () => glitchRoulette(),
+    shareImg: async () => URL.createObjectURL(await shareImage("勝訴！", location.origin)),
     cut: async () => { await cutIn("それは違うよ！"); await breakGlass(); },
     state: () => ({ myTurn, turnLeft, connected: live?.ws?.readyState, mode, ...dbg }),
   };

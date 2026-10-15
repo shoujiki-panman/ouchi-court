@@ -336,6 +336,18 @@
   /* 論破と異議ありの違いが分かりにくい（10/16）→ ひとりで挑戦では出さない。論破は流れる発言の黄色い所を撃つ（ボタンではない）。異議ありは、ふたりで対戦のときだけ */
   #ronpa { display: none !important; }
   body:not(.versus) #objection { display: none !important; }
+  #badgeShelf .hist { width: 100%; font-size: .75rem; color: var(--muted); text-align: left; max-height: 7em; overflow-y: auto; }
+  #badgeShelf .hist summary { cursor: pointer; color: #fff; text-align: center; }
+  #turnBtn { display: none !important; }
+  /* カメラの証拠品は、ふたりで対戦のときだけ（ひとりはAIのヒントカードがある 10/16） */
+  body:not(.versus) #evidenceBtn { display: none !important; }
+  #result .rt { font-size: 3rem; }
+  #result .rf { background: rgba(63,169,255,.18); padding: 6px; margin: 6px 0; }
+  #result .rbtns button { flex: 1; min-width: 9em; }
+  #result .more { text-align: left; margin-top: 8px; font-size: .85rem; }
+  #result .more summary { cursor: pointer; color: var(--muted); text-align: center; }
+  #result #resultClose { margin-top: 8px; }
+  #intro .challenge { background: #3fa9ff; color: #001; padding: 6px 14px; transform: skewX(-8deg); font-size: .95rem; }
 </style>
 </head>
 <body>
@@ -395,8 +407,8 @@
   <div id="cam"><video id="video" autoplay playsinline muted></video><br><button id="submitEv"><span>この証拠品を突きつける</span></button> <button id="cancelEv" class="sub"><span>やめる</span></button></div>
   <div id="status"></div>
   <div id="evidence"></div>
-  <details><summary>法廷記録</summary><pre id="log" style="white-space:pre-wrap"></pre></details>
-  <footer>飛んでくる発言をタップすると「論破！」。<br>BGM：魔王魂（maou.audio）／効果音・声：オリジナル／Alexa+ で「アレクサ、裁判して」と言ったときの体験を、ブラウザで再現したものです。キャラも演出もオリジナルです。判例は名前・争点・判決の要約だけを保存します。</footer>
+  <details><summary>📜 これまでの会話を文字で見る</summary><pre id="log" style="white-space:pre-wrap"></pre></details>
+  <footer>BGM：魔王魂（maou.audio）／コン太・ポン子の声：AivisSpeech（まお・コハク）／効果音：オリジナル／Alexa+ で「アレクサ、裁判して」と言ったときの体験を、ブラウザで再現したものです。キャラも演出もオリジナルです。判例は名前・争点・判決の要約だけを保存します。</footer>
 </main>
 <script type="module" src="app.js"></script>
 </body>
