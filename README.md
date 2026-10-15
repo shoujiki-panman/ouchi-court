@@ -42,7 +42,7 @@ Browser (public/)                      Cloudflare Worker (src/worker.js)
  └ /api/topics /api/kotodama /api/rival /api/penalty-image (FLUX on Workers AI)
 ```
 
-- **MCP server**: [`oyasumi-mcp`](../oyasumi-mcp) exposes `get_precedents` and `file_case`
+- **MCP server**: `oyasumi-mcp` (a separate repository) exposes `get_precedents` and `file_case`
   (MCP 2025-11-25, Streamable HTTP). Each verdict is filed as a short precedent (names,
   issue, outcome only) and the next trial can cite it — the court remembers your family.
 - **Decisions live in code, not in the model**: vote counting, scoring, who wins, which
@@ -56,6 +56,19 @@ Browser (public/)                      Cloudflare Worker (src/worker.js)
 - Penalties come from a fixed list of 12 harmless, silly actions.
 - Sharing never includes the child's name or words — only the topic, side and score.
 - Precedents store names, the issue and the outcome summary only.
+
+## Run it yourself
+
+```bash
+npx wrangler deploy   # Cloudflare Workers (static assets + API)
+```
+
+Secrets: `GEMINI_API_KEY`, `MCP_TOKEN` (`wrangler secret put …`). Bindings are in `wrangler.toml`
+(Workers AI, a KV namespace, and a service binding to the MCP server).
+
+The BGM files are **not included** in this repository: 魔王魂's terms do not allow
+redistributing the audio files themselves. Download 「サイバー38」「サイバー40」「サイバー42」
+from https://maou.audio and save them as `public/bgm/calm.mp3`, `debate.mp3` and `hot.mp3`.
 
 ## Credits
 
