@@ -4,6 +4,7 @@
 //   POST /api/voice    … 判事の声（Gemini TTS。書記官とは別の声）
 // 合言葉なしで使える（1日の回数に上限）。画面（public/）はだれでも開ける。
 import { mcpClient } from "./mcp.js";
+import { PUNISHMENTS, punishmentList } from "../public/punishments.js";
 
 const GEMINI = "https://generativelanguage.googleapis.com/v1beta";
 
@@ -12,9 +13,9 @@ const JUDGE_PROMPT =
   "重々しく、でもちょっとおとぼけで笑える裁判長。法廷の記録・3人の判事の票・過去の判例を読み、判決を出す。結論（だれの勝ちか・票数）はすでに決まっているので、そのとおりに言い渡し、変えないこと。" +
   "speech は読み上げる判決文で、必ず「判決を言い渡します。」で始め、4文まで: 勝った方（引き分け・和解もよい）／どちらの言い分のどこが良くてどこがよくなかったか／" +
   "判例が渡されたときだけ、その中身どおりに一言ふれる（判例がないときや、No precedents のときは過去の話をしない。日付や中身を作らない）／罰。" +
-  "罰は笑える小さな挑戦（変顔を10秒・ゾウのまねで部屋を一周・相手のいいところを3つ言う 等）か、仲直りの合図か、家の約束（歯磨き一番乗り 等）。" +
+  "罰は、次の罰ゲームの一覧から1つ選び、punishment にその id を入れる（だれがやるかも決める。和解なら二人でやる）:\n" + punishmentList() + "\n" +
   "子どもを恥ずかしい目にあわせる罰、食べ物やおもちゃを取り上げる罰、痛い罰は絶対に出さない。どちらかを悪者と決めつけない。" +
-  '出力は JSON だけ: {"speech": "...", "winner": "名前か draw", "sentence": "罰", "issue": "何のけんか（10字程度）", "plaintiff": "名前", "defendant": "名前"}';
+  '出力は JSON だけ: {"speech": "...", "winner": "名前か draw", "punishment": "罰ゲームの id", "who": "罰ゲームをする人（名前 or 二人）", "sentence": "罰の一言", "issue": "何のけんか（10字程度）", "plaintiff": "名前", "defendant": "名前"}';
 
 const json = (data, status = 200) => Response.json(data, { status });
 
@@ -137,7 +138,8 @@ async function verdict(env, { record, names }) {
     .catch((e) => console.log(`file_case failed: ${e}`));
   const winner = decided;
   const stamp = winner === "draw" ? "和解" : winner === (v.defendant || names?.[1]) ? "無罪" : "有罪";
-  return { ...v, panel: votes, stamp, precedents: prec };
+  const pun = PUNISHMENTS.find((p) => p.id === v.punishment) ?? PUNISHMENTS[Math.floor(Math.random() * PUNISHMENTS.length)];
+  return { ...v, panel: votes, stamp, punishment: pun, precedents: prec };
 }
 
 // 判事の声（24kHz の PCM を base64 で返す）

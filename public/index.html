@@ -24,13 +24,16 @@
   @keyframes shake { 20%{transform:translate(-12px,5px)} 40%{transform:translate(10px,-6px)} 60%{transform:translate(-8px,3px)} 80%{transform:translate(6px,-2px)} }
 
   /* 席（輪） */
-  .seat { position: absolute; width: 74px; height: 74px; border-radius: 50%; overflow: hidden; border: 3px solid rgba(255,255,255,.35); background: #000; transition: all .35s; filter: grayscale(.4) brightness(.8); }
+  .seat { position: absolute; width: 74px; transition: transform .35s; z-index: 2; }
+  .seat .ring { width: 74px; height: 74px; border-radius: 50%; overflow: hidden; border: 3px solid rgba(255,255,255,.35); background: #000; filter: grayscale(.4) brightness(.8); transition: all .35s; }
   .seat img { width: 100%; height: 100%; object-fit: cover; object-position: center 18%; }
-  .seat.on { border-color: var(--pink); filter: none; box-shadow: 0 0 22px var(--pink); transform: scale(1.15); }
-  .seat span { position: absolute; bottom: -2px; left: 50%; transform: translateX(-50%); font-size: .6rem; background: var(--pink); padding: 0 4px; border-radius: 4px; white-space: nowrap; }
+  .seat.on { transform: scale(1.12); }
+  .seat.on .ring { border-color: var(--pink); filter: none; box-shadow: 0 0 22px var(--pink); }
+  .seat span { position: absolute; top: calc(100% + 3px); left: 50%; transform: translateX(-50%); font-size: .66rem; background: rgba(0,0,0,.75); border: 1px solid var(--pink); padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
 
   /* 話している人（大きく） */
-  #hero { position: absolute; left: 50%; bottom: 120px; width: 300px; height: 300px; transform: translateX(-50%); transition: opacity .25s, transform .35s; mix-blend-mode: lighten; }
+  #hero { position: absolute; left: 50%; bottom: 122px; width: 250px; height: 250px; transform: translateX(-50%); transition: opacity .25s, transform .35s; mix-blend-mode: lighten;
+    -webkit-mask-image: radial-gradient(circle at 50% 50%, #000 58%, transparent 71%); mask-image: radial-gradient(circle at 50% 50%, #000 58%, transparent 71%); }
   #hero img { width: 100%; height: 100%; object-fit: contain; }
   #hero.swap { opacity: 0; transform: translateX(-30%) scale(.9); }
   #hero.talk img { animation: bob .3s infinite alternate; }
@@ -66,6 +69,32 @@
   .reel .why { font-size: .68rem; color: var(--muted); padding: 2px 6px; }
   .reel.spin .val { animation: spin .12s steps(2) infinite; }
   @keyframes spin { 0% { transform: translateY(-40%); opacity: .3; } 100% { transform: translateY(40%); opacity: .3; } }
+  /* ドパガキ要素：ヒートメーター・点数・観客のリアクション・称号 */
+  #heat { position: absolute; left: 12px; right: 12px; top: 10px; height: 14px; background: rgba(255,255,255,.12); border-radius: 8px; overflow: hidden; z-index: 4; }
+  #heatBar { height: 100%; width: 0%; background: linear-gradient(90deg, var(--purple), var(--pink), var(--gold)); transition: width .4s; }
+  #heat.max { box-shadow: 0 0 18px var(--gold); animation: pulse .5s infinite alternate; }
+  @keyframes pulse { to { transform: scale(1.02); } }
+  #score { position: absolute; right: 14px; top: 30px; z-index: 4; font-size: 1.1rem; text-shadow: 2px 2px 0 #000; }
+  #combo { color: var(--gold); }
+  .pop { position: absolute; z-index: 6; font-size: 1.6rem; color: var(--gold); text-shadow: 2px 2px 0 #000; animation: pop 1.2s forwards; pointer-events: none; }
+  @keyframes pop { 0% { transform: scale(.4); opacity: 0; } 20% { transform: scale(1.3); opacity: 1; } 100% { transform: translateY(-80px) scale(1); opacity: 0; } }
+  .emoji { position: absolute; bottom: 120px; font-size: 2rem; z-index: 4; animation: rise 2.2s ease-out forwards; pointer-events: none; }
+  @keyframes rise { to { transform: translateY(-260px) rotate(20deg); opacity: 0; } }
+  #title { position: absolute; inset: 0; display: none; place-items: center; background: rgba(0,0,0,.8); z-index: 9; text-align: center; }
+  #title.on { display: grid; }
+  #title .badge { font-size: 2.6rem; padding: 14px 30px; border: 5px solid var(--gold); background: radial-gradient(circle, #3a1650, #12061c); text-shadow: 3px 3px 0 var(--pink); animation: stamp .5s forwards; }
+  /* 罰ゲームのルーレット */
+  #roulette { position: absolute; inset: 0; display: none; place-items: center; background: rgba(0,0,0,.82); z-index: 5; text-align: center; }
+  #roulette.on { display: grid; }
+  #roulette h2 { margin: 0 0 6px; font-size: 1.8rem; color: var(--gold); text-shadow: 3px 3px 0 var(--pink); }
+  #rWho { color: var(--muted); margin-bottom: 10px; }
+  #rItem { font-size: 1.7rem; padding: 18px 26px; border: 4px solid var(--gold); background: #160a22; min-width: 280px; max-width: 90vw; }
+  #rItem.done { border-color: var(--pink); box-shadow: 0 0 28px var(--pink); }
+  #count { font-size: 5rem; color: #fff; text-shadow: 4px 4px 0 var(--pink); margin-top: 10px; min-height: 1.2em; }
+  /* 閉廷の紙吹雪 */
+  .confetti { position: absolute; top: -20px; width: 10px; height: 16px; z-index: 8; animation: fall 2.6s linear forwards; }
+  @keyframes fall { to { transform: translateY(520px) rotate(720deg); opacity: .2; } }
+  #shout.gold { background: linear-gradient(90deg, var(--gold), var(--pink)); color: #1a0b22; text-shadow: 3px 3px 0 #fff; }
   #stamp { position: absolute; left: 50%; top: 42%; transform: translate(-50%,-50%) scale(3); opacity: 0; font-size: 5rem; color: var(--pink); border: 8px solid var(--pink); padding: 0 24px; background: rgba(0,0,0,.85); z-index: 6; pointer-events: none; }
   #stamp.on { animation: stamp .45s forwards; }
   @keyframes stamp { to { transform: translate(-50%,-50%) scale(1) rotate(-8deg); opacity: 1; } }
@@ -86,7 +115,7 @@
   footer { color: var(--muted); font-size: .72rem; margin-top: 16px; line-height: 1.6; }
   #pass { display: none; }
   @media (max-width: 560px) {
-    #stage { height: 430px; } #hero { width: 230px; height: 230px; } .seat { width: 54px; height: 54px; }
+    #stage { height: 430px; } #hero { width: 200px; height: 200px; } .seat, .seat .ring { width: 54px; } .seat .ring { height: 54px; } .seat span { font-size: .55rem; }
     #shout { font-size: 2.8rem; } #stamp { font-size: 3.2rem; } .reel { width: 100px; } .fly { font-size: 1.2rem; }
   }
 </style>
@@ -97,11 +126,15 @@
 
   <div id="stage">
     <div id="bg"></div>
+    <div id="heat"><div id="heatBar"></div></div>
+    <div id="score" class="display">論破 <span id="pts">0</span>pt <span id="combo"></span></div>
+    <div id="title"><div><div style="color:var(--muted)">本日の称号</div><div class="badge display" id="badge">論破王</div></div></div>
     <div id="hero"><img id="heroImg" src="img/judge.jpg" alt=""></div>
     <div id="nameplate" class="display">裁判長タヌキ</div>
     <div id="box">けんかしたら、開廷。下の「開廷する」を押して、マイクを許可してね。</div>
     <div id="shout" class="display">論破！</div>
     <div id="vote"><div><h2 class="display">投票タイム</h2><div class="reels" id="reels"></div></div></div>
+    <div id="roulette"><div><h2 class="display">罰ゲーム</h2><div id="rWho"></div><div id="rItem" class="display">？？？</div><div id="count" class="display"></div></div></div>
     <div id="stamp" class="display">和解</div>
     <div id="flash"></div>
   </div>
