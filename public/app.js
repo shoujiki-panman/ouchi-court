@@ -60,7 +60,7 @@ const CAST = {
 };
 
 // 円形の法廷に席を並べる（裁判長が上、まわりに書記官・弁護人・証言台）
-const SEATS = { judge: [50, 3], bailiff: [15, 14], lawyerP: [85, 14], lawyerD: [14, 44], witness: [86, 44], detective: [50, 58] };
+const SEATS = { judge: [50, 3], bailiff: [15, 14], lawyerP: [85, 14], lawyerD: [14, 44], witness: [86, 44] }; // 調査官ホーは呼ばれたときだけ中央に出る
 for (const [id, [x, y]] of Object.entries(SEATS)) {
   const el = document.createElement("div");
   el.className = "seat";
