@@ -299,7 +299,7 @@ async function topics(env) {
 }
 
 // ひとりで挑戦モードの相手：プレイヤーの主張に弱い所があれば、反対側の弁護人コン太が反論で割り込む
-async function opponent(env, { topic, side, record, last }) {
+async function opponent(env, { topic, side, record, last, level = 1 }) {
   const v = await within(
     ask(
       env,
@@ -307,7 +307,8 @@ async function opponent(env, { topic, side, record, last }) {
       `お題「${topic}」で、子どもは「${side}」側。あなたは反対側の弁護人コン太。子どもの最新の発言に、理由がない・決めつけ・前と食い違う などの弱い所があれば「異議あり！」で短く反論する。よい理由が言えていたら割り込まない。` +
         `argument は、この発言がお題についての意見や理由になっているか（「わかった」「はい」「賛成で戦う」など返事・名前・あいさつだけなら false）。` +
         `strength は意見の説得力（0=理由なし・「なんとなく」〜3=とても説得力がある。理由が1つでもちゃんと言えていれば2、具体例や比べ方まであれば3）。子どもにはやさしめに採点する。reason は判定の一言（子ども向けに20字以内）。` +
-        '出力は JSON だけ: {"argument": true か false, "object": true か false, "line": "異議あり！から始まる40字以内", "strength": 0, "reason": "..."}',
+        `hint は味方のコーチ「ポン子」の一言：まず良い所を1つほめてから、もっと強くなる言い方を1つだけ（例を入れて40字以内）。コン太の強さはレベル${level}（レベルが上がるほど line の反論を鋭くする）。` +
+        '出力は JSON だけ: {"argument": true か false, "object": true か false, "line": "異議あり！から始まる40字以内", "strength": 0, "reason": "...", "hint": "..."}',
       `これまで:\n${record}\n\n子どもの最新の発言: ${last}`,
     ),
     6000,
@@ -316,11 +317,38 @@ async function opponent(env, { topic, side, record, last }) {
   // 天秤：説得力があればプレイヤー側（マイナス）、なければ相手側に少し
   const sway = strength >= 2 ? -strength : 1;
   const isArg = v?.argument === true || v?.argument === "true";
-  const point = !isArg ? null : strength >= 2 ? "player" : "rival";
+  // ライバルが強くなるほど、ポイントに要る説得力が上がる（レベル4から3が要る）
+  const point = !isArg ? null : strength >= (level >= 4 ? 3 : 2) ? "player" : "rival";
+  const hint = String(v?.hint ?? "").slice(0, 60);
   const why = String(v?.reason ?? (point === "player" ? "理由がしっかりしてる！" : "理由がもう少しほしい")).slice(0, 30);
-  if (!v?.object || !v?.line) return { id: null, sway, point, why };
+  if (!v?.object || !v?.line) return { id: null, sway, point, why, hint, strength };
   const line = String(v.line).startsWith("異議あり") ? String(v.line) : `異議あり！${v.line}`;
-  return { id: "lawyerD", name: "弁護人コン太", line: line.slice(0, 60), sway, point, why };
+  return { id: "lawyerD", name: "弁護人コン太", line: line.slice(0, 60), sway, point, why, hint, strength };
+}
+
+// ライバル・コン太の戦績（家族ごとに1つ）。勝つたびにコン太のレベルが上がる
+async function rival(env, { result, topic, best } = {}) {
+  const r = (await env.COURT.get("rival", "json")) ?? { level: 1, wins: 0, losses: 0, draws: 0, history: [] };
+  if (!result) return r;
+  if (result === "win") {
+    r.wins++;
+    r.level = Math.min(5, r.level + 1);
+  } else if (result === "lose") r.losses++;
+  else r.draws++;
+  r.history = [...(r.history ?? []), { at: Date.now(), topic, result, best }].slice(-10);
+  await env.COURT.put("rival", JSON.stringify(r));
+  return r;
+}
+
+// 罰ゲームの絵：やる人（コン太 か 書記官タヌ吉がお手本）を、ポップな法廷ドラマ風に（Workers AI の画像モデル）
+async function penaltyImage(env, { id, who }) {
+  const p = PUNISHMENTS.find((x) => x.id === id) ?? PUNISHMENTS[0];
+  const actor = who === "rival" ? "a cute cartoon fox boy lawyer in a navy suit" : "a cute cartoon tanuki (raccoon dog) court clerk with a pink bow tie";
+  const img = await env.AI.run("@cf/black-forest-labs/flux-1-schnell", {
+    prompt: `${actor} ${p.en ?? "doing a funny penalty game"}, comedic penalty game scene, pop art comic style, hot pink and neon purple burst background, speed lines, sparkles, big expressive face, kid-friendly, Japanese anime illustration, no text`,
+    steps: 6,
+  });
+  return { image: img.image };
 }
 
 // 判事の声（24kHz の PCM を base64 で返す）
@@ -370,6 +398,8 @@ export default {
         return json(t);
       }
       if (pathname === "/api/opponent") return json(await opponent(env, await request.json()));
+      if (pathname === "/api/rival") return json(await rival(env, await request.json()));
+      if (pathname === "/api/penalty-image") return json(await penaltyImage(env, await request.json()));
       if (pathname === "/api/investigate") return json(await investigate(env, await request.json()));
       return json({ error: "not found" }, 404);
     } catch (e) {

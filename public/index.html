@@ -166,6 +166,25 @@
   button:disabled { opacity: .3; cursor: default; }
   button.sub { background: #2a1838; }
   button.big { font-size: 1.25rem; padding: 16px 30px; background: linear-gradient(90deg, var(--pink), var(--purple)); }
+  /* 罰ゲームの絵 */
+  #rImg img { width: 220px; max-width: 70vw; margin-top: 10px; border: 4px solid var(--pink); box-shadow: 0 0 24px var(--pink); animation: stamp .4s forwards; }
+  /* コーチ・ポン子の一言 */
+  #coach { position: absolute; right: 10px; bottom: 132px; max-width: 46%; display: flex; gap: 8px; align-items: center; background: rgba(20,8,30,.92); border: 2px solid var(--pink); padding: 6px 10px; z-index: 5; font-size: .85rem; opacity: 0; pointer-events: none; }
+  #coach img { width: 48px; height: 48px; object-fit: contain; }
+  #coach b { display: block; color: var(--pink); font-size: .75rem; }
+  #coach.on { animation: coach 7s forwards; }
+  @keyframes coach { 0% { opacity: 0; transform: translateY(20px); } 6% { opacity: 1; transform: none; } 90% { opacity: 1; } 100% { opacity: 0; } }
+  /* 結果カード */
+  #result { position: absolute; inset: 0; display: none; place-items: center; background: rgba(0,0,0,.85); z-index: 10; }
+  #result.on { display: grid; }
+  #result .card { width: min(440px, 92%); background: linear-gradient(160deg, #2a0f3d, #12061c); border: 4px solid var(--gold); padding: 14px 18px; text-align: center; box-shadow: 0 0 40px var(--pink); animation: stamp .45s forwards; }
+  #result .rt { font-size: 2.6rem; color: var(--gold); text-shadow: 3px 3px 0 var(--pink); }
+  #result .rs { font-size: 1.4rem; margin: 2px 0 8px; }
+  #result .rq, #result .rp { font-size: .82rem; color: var(--muted); margin: 6px 0; }
+  #result .rb { background: rgba(255,255,255,.06); padding: 8px; margin: 8px 0; font-size: .95rem; }
+  #result .rb b, #result .rc b { display: block; color: var(--pink); font-size: .72rem; }
+  #result .rc { display: flex; gap: 8px; align-items: center; text-align: left; font-size: .85rem; margin: 6px 0; }
+  #result .rc img { width: 44px; height: 44px; object-fit: contain; }
   /* ひとりで挑戦の点数 */
   #soloScore { display: none; position: absolute; left: 50%; top: 34px; transform: translateX(-50%); z-index: 4; gap: 10px; align-items: baseline; background: rgba(0,0,0,.7); padding: 4px 14px; border: 2px solid var(--gold); }
   #soloScore .me { color: var(--pink); font-size: 1.4rem; }
@@ -222,8 +241,10 @@
     <div id="box">けんかしたら、開廷。下の「開廷する」を押して、マイクを許可してね。</div>
     <div id="shout" class="display">論破！</div>
     <div id="vote"><div><h2 class="display">投票タイム</h2><div class="reels" id="reels"></div></div></div>
-    <div id="roulette"><div><h2 class="display">罰ゲーム</h2><div id="rWho"></div><div id="rItem" class="display">？？？</div><div id="count" class="display"></div></div></div>
+    <div id="roulette"><div><h2 class="display">罰ゲーム</h2><div id="rWho"></div><div id="rItem" class="display">？？？</div><div id="rImg"></div><div id="count" class="display"></div></div></div>
     <div id="stamp" class="display">和解</div>
+    <div id="coach"></div>
+    <div id="result"></div>
     <div id="banner" class="display"></div>
     <div id="paused" class="display">⏸ 一時停止中</div>
     <div id="flash"></div>
