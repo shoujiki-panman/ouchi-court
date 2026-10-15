@@ -41,7 +41,7 @@ const SOLO = (topic, side, rv) => `あなたは「おうち裁判 ひとりで�
 1. 開廷！ルールを一言で。子どもに名前を聞き「〇〇さんですね？」と確かめる。
 2. お題の説明を2〜3文で（上の説明を使う）。賛成・反対の例を1つずつ言い、「ラウンド1！${side}側の〇〇さん、どう思う？」と聞く。
 3. 各ラウンド: 子どもが意見を言う → 採点の知らせが届いたら1文だけ実況 → すぐコン太として反論を1つ短く → 「ラウンド2！」と次へ。アドバイスや説明は試合中にしない（白熱させる）。
-4. 「試合終了」の知らせが来たときだけ「勝負あり！」と言って call_judge を呼ぶ（自分でラウンドを数えて終わらせない。採点の知らせが来るまで次へ進まない）。
+4. 「試合終了」の知らせが来たら「勝負あり！」とだけ言う。判決は画面が始めるので、ひとりで挑戦では call_judge を呼ばない（自分でラウンドを数えて終わらせない。採点の知らせが来るまで次へ進まない）。
 5. 判決と罰ゲームのあと「これにて閉廷！」。
 守ること: 子どもが話している途中で口をはさまない。子どもを言い負かして終わらせない。考えを言えたことを必ずほめる。日本語で話す。`;
 
@@ -264,6 +264,7 @@ async function openCourt(resume = false) {
     arguing = false;
     rounds = 0;
     suddenDeath = false;
+    gameOver = false;
     ronpaArmed = false;
     breakdown = { reason: 0, example: 0, counter: 0, ronpa: 0, repeat: 0, final: 0 };
     roundWins = { player: 0, rival: 0 };
@@ -414,10 +415,20 @@ async function openCourt(resume = false) {
 // 判事たちの合議：3人がそれぞれ票を入れ、裁判長タヌキがまとめて言い渡す
 let judged = false;
 let userClosed = false;
+// 書記官（AI）への返事：道具の呼び出しから来たときは toolResponse、コードから始めたときは普通の知らせ
+function reply(call, result) {
+  if (call.id) live.toolResponse([{ id: call.id, name: call.name, response: { result } }]);
+  else live.send({ clientContent: { turns: [{ role: "user", parts: [{ text: `（${result}）` }] }], turnComplete: true } });
+}
 async function judge(call) {
   if (call.name !== "call_judge") return;
+  // ひとりで挑戦の判決は、点数をつけ終えた画面だけが始める（書記官が先に呼ぶと最終ラウンドの点が入らない 10/16）
+  if (mode === "solo" && call.id && !gameOver) {
+    reply(call, "まだ試合中。判決は画面が始めるので待つ。今のラウンドの採点の知らせを待ってから進める。");
+    return;
+  }
   if (judged) {
-    live.toolResponse([{ id: call.id, name: call.name, response: { result: "判決はもう出ている。くり返さず、罰や仲直りを確かめて閉廷する。" } }]);
+    if (call.id) reply(call, "判決はもう出ている。くり返さず、罰や仲直りを確かめて閉廷する。");
     return;
   }
   judged = true;
@@ -465,13 +476,11 @@ async function judge(call) {
     step("penalty");
     if (v.punishment) await punishmentTime(v.punishment, v.who, penaltyImg);
     if (mode === "solo") await resultCard(soloResult, v);
-    live.toolResponse([
-      { id: call.id, name: call.name, response: { result: `裁判長がたった今、判決を読み上げた（書記官は判決をくり返さないこと）。罰ゲーム: ${v.who ?? ""}「${v.punishment?.text ?? v.sentence}」（画面でもう発表して、やり終えた）。書記官は、罰や仲直りが今できているかを名前を呼んで楽しく確かめてから「これにて閉廷！」と締める。` } },
-    ]);
+    reply(call, `裁判長がたった今、判決を読み上げた（書記官は判決をくり返さないこと）。罰ゲーム: ${v.who ?? ""}「${v.punishment?.text ?? v.sentence}」（画面でもう発表して、やり終えた）。書記官は、罰や仲直りが今できているかを名前を呼んで楽しく確かめてから「これにて閉廷！」と締める。`);
   } catch (e) {
     drum.stop();
     status(`判事が来られませんでした: ${e.message}`);
-    live.toolResponse([{ id: call.id, name: call.name, response: { result: "判事が不在。書記官が代わりに、二人に仲直りの握手をすすめて閉廷する。" } }]);
+    reply(call, "判事が不在。書記官が代わりに、二人に仲直りの握手をすすめて閉廷する。");
   } finally {
     judging = false;
     status("開廷中");
@@ -742,6 +751,7 @@ function showSoloScore() {
 let breakdown = { reason: 0, example: 0, counter: 0, ronpa: 0, repeat: 0, final: 0 };
 let roundWins = { player: 0, rival: 0 };
 let suddenDeath = false;
+let gameOver = false;
 async function soloPoint(r, statement) {
   if (judged || !arguing || !r.isArg) return; // 名前や返事は数えない
   const last = suddenDeath || rounds === 2; // 最終ラウンド（またはサドンデス）
@@ -799,7 +809,10 @@ async function soloPoint(r, statement) {
     end = "同点！サドンデスに突入。次の1ラウンドで勝った方の勝ち、得点は2倍。「サドンデス！」と叫んで、最後のラウンドへ。";
     shout("サドンデス！");
   } else if (rounds >= 3) {
-    end = "試合終了！「勝負あり！」と言って、すぐ call_judge を呼んでください。";
+    end = "試合終了！「勝負あり！」とだけ言ってください（判決はこちらで始めます）。";
+    shout("勝負あり！");
+    gameOver = true;
+    setTimeout(() => judge({ name: "call_judge", id: null, args: {} }), 3500);
   }
   step(end.startsWith("試合終了") ? "verdict" : `r${Math.min(rounds + 1, 3)}`);
   live?.send({ clientContent: { turns: [{ role: "user", parts: [{ text: `（ラウンド${rounds}の採点: 子ども+${me}（${parts.join("・")}）、コン太+${rival}。合計 あなた${soloScore.player} - ${soloScore.rival}コン太。理由「${r.why}」。${end || `実況は1文だけで、すぐコン太の反論 → 「ラウンド${rounds + 1}！」${rounds + 1 === 3 ? "（最終ラウンド！得点2倍と言って煽る）" : ""}へ。テンポよく、白熱させて。`}）` }] }], turnComplete: true } });
@@ -813,7 +826,12 @@ function startSoloClock() {
     $("feverClock").textContent = `のこり ${Math.floor(soloLeft / 60)}:${String(soloLeft % 60).padStart(2, "0")}`;
     if (soloLeft <= 0) {
       clearInterval(soloClock);
-      if (!judged) live?.send({ clientContent: { turns: [{ role: "user", parts: [{ text: "（3分たちました！時間切れ。「勝負あり！」と言って、すぐ call_judge を呼んでください）" }] }], turnComplete: true } });
+      if (!judged) {
+        live?.send({ clientContent: { turns: [{ role: "user", parts: [{ text: "（3分たちました！時間切れ。「勝負あり！」とだけ言ってください）" }] }], turnComplete: true } });
+        shout("時間切れ！");
+        gameOver = true;
+        setTimeout(() => judge({ name: "call_judge", id: null, args: {} }), 3500);
+      }
     }
   }, 1000);
 }
@@ -1046,6 +1064,10 @@ function submitEvidence() {
 
 function closeCourt() {
   userClosed = true;
+  setTimeout(() => {
+    $("intro").classList.remove("hide");
+    loadRival();
+  }, 1500);
   beat?.stop();
   stopMic?.();
   live?.close();
@@ -1062,7 +1084,8 @@ $("open").onclick = () => {
 };
 // ひとりで挑戦：お題を選んで、賛成か反対かを決めてから開廷
 $("solo").onclick = async () => {
-  $("topics").innerHTML = "<p>最近の話題からお題を探しています…</p>";
+  $("intro").classList.add("hide");
+  $("topics").innerHTML = "<p>いま話題のお題を探しています…</p>";
   $("topics").style.display = "block";
   try {
     const { topics } = await api("/api/topics");
@@ -1080,6 +1103,7 @@ $("solo").onclick = async () => {
     $("topics").querySelector(".topic").classList.add("chosen");
     $("topics").querySelectorAll(".side").forEach((b) => (b.onclick = async () => {
       mode = "solo";
+      document.body.classList.add("solo");
       topic = chosen;
       side = b.dataset.s;
       try {
@@ -1140,3 +1164,14 @@ if (new URLSearchParams(location.search).has("debug")) {
 
 // 対戦モードは今は出さない（10/16「対戦はまだいらないかも」）。コードは残す
 $("open").style.display = "none";
+
+$("resume").style.display = "none";
+// タイトル画面に、ライバルの戦績を出す
+async function loadRival() {
+  try {
+    const r = await api("/api/rival", {});
+    const n = (r.wins ?? 0) + (r.losses ?? 0) + (r.draws ?? 0);
+    $("rivalLine").textContent = n ? `Lv${r.level}｜あなたの ${r.wins}勝 ${r.losses}敗${r.draws ? ` ${r.draws}分` : ""}${r.history?.at(-1)?.result === "win" ? "（リベンジに燃えている！）" : ""}` : "はじめての対決！";
+  } catch {}
+}
+loadRival();

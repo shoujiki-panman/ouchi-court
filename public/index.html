@@ -106,7 +106,7 @@
   @keyframes rise { to { transform: translateY(-260px) rotate(20deg); opacity: 0; } }
   #title { position: absolute; inset: 0; display: none; place-items: center; background: rgba(0,0,0,.8); z-index: 9; text-align: center; }
   #title.on { display: grid; }
-  #title .badge { font-size: 2.6rem; padding: 14px 30px; border: 5px solid var(--gold); background: radial-gradient(circle, #3a1650, #12061c); text-shadow: 3px 3px 0 var(--pink); animation: stamp .5s forwards; }
+  #title .badge { font-size: 2.6rem; padding: 14px 30px; border: 5px solid var(--gold); background: radial-gradient(circle, #3a1650, #12061c); text-shadow: 3px 3px 0 var(--pink); animation: slamIn .5s forwards; }
   /* FEVER（ゲージ満タン） */
   #stage.fever #bg { filter: brightness(.8) saturate(2) hue-rotate(-30deg); animation: sweep 3s ease-in-out infinite alternate; }
   #stage.fever { box-shadow: 0 0 0 4px var(--pink), 0 0 40px var(--pink); animation: feverPulse .45s infinite alternate; }
@@ -156,6 +156,9 @@
   #stamp { position: absolute; left: 50%; top: 42%; transform: translate(-50%,-50%) scale(3); opacity: 0; font-size: 5rem; color: var(--pink); border: 8px solid var(--pink); padding: 0 24px; background: rgba(0,0,0,.85); z-index: 6; pointer-events: none; }
   #stamp.on { animation: stamp .45s forwards; }
   @keyframes stamp { to { transform: translate(-50%,-50%) scale(1) rotate(-8deg); opacity: 1; } }
+  /* カードや絵は中央寄せの translate を持たないので、別の「ドン」を使う（stamp を使うと左上にずれた 10/16） */
+  @keyframes slamIn { from { transform: scale(1.8) rotate(-4deg); opacity: 0; } to { transform: none; opacity: 1; } }
+  #stamp { white-space: nowrap; }
 
   #names input { font: inherit; padding: 10px 12px; border: 2px solid var(--pink); background: #160a22; color: #fff; width: 13em; transform: skewX(-8deg); }
   #names #nameD { border-color: #3fa9ff; }
@@ -167,7 +170,7 @@
   button.sub { background: #2a1838; }
   button.big { font-size: 1.25rem; padding: 16px 30px; background: linear-gradient(90deg, var(--pink), var(--purple)); }
   /* 罰ゲームの絵 */
-  #rImg img { width: 220px; max-width: 70vw; margin-top: 10px; border: 4px solid var(--pink); box-shadow: 0 0 24px var(--pink); animation: stamp .4s forwards; }
+  #rImg img { width: 220px; max-width: 70vw; margin-top: 10px; border: 4px solid var(--pink); box-shadow: 0 0 24px var(--pink); animation: slamIn .4s forwards; }
   /* コーチ・ポン子の一言 */
   #coach { position: absolute; right: 10px; bottom: 132px; max-width: 46%; display: flex; gap: 8px; align-items: center; background: rgba(20,8,30,.92); border: 2px solid var(--pink); padding: 6px 10px; z-index: 5; font-size: .85rem; opacity: 0; pointer-events: none; }
   #coach img { width: 48px; height: 48px; object-fit: contain; }
@@ -175,9 +178,9 @@
   #coach.on { animation: coach 7s forwards; }
   @keyframes coach { 0% { opacity: 0; transform: translateY(20px); } 6% { opacity: 1; transform: none; } 90% { opacity: 1; } 100% { opacity: 0; } }
   /* 結果カード */
-  #result { position: absolute; inset: 0; display: none; place-items: center; background: rgba(0,0,0,.85); z-index: 10; }
+  #result { position: absolute; inset: 0; display: none; place-items: center; padding: 12px 0; background: rgba(0,0,0,.85); z-index: 10; }
   #result.on { display: grid; }
-  #result .card { width: min(440px, 92%); background: linear-gradient(160deg, #2a0f3d, #12061c); border: 4px solid var(--gold); padding: 14px 18px; text-align: center; box-shadow: 0 0 40px var(--pink); animation: stamp .45s forwards; }
+  #result .card { width: min(440px, 92%); background: linear-gradient(160deg, #2a0f3d, #12061c); border: 4px solid var(--gold); padding: 14px 18px; text-align: center; box-shadow: 0 0 40px var(--pink); animation: slamIn .45s forwards; max-height: calc(100% - 24px); overflow-y: auto; box-sizing: border-box; }
   #result .rt { font-size: 2.6rem; color: var(--gold); text-shadow: 3px 3px 0 var(--pink); }
   #result .rs { font-size: 1.4rem; margin: 2px 0 8px; }
   #result .rq, #result .rp { font-size: .82rem; color: var(--muted); margin: 6px 0; }
@@ -185,27 +188,66 @@
   #result .rb b, #result .rc b { display: block; color: var(--pink); font-size: .72rem; }
   #result .rc { display: flex; gap: 8px; align-items: center; text-align: left; font-size: .85rem; margin: 6px 0; }
   #result .rc img { width: 44px; height: 44px; object-fit: contain; }
+  /* ── 見た目の整理（10/16） ── */
+  header { display: flex; align-items: baseline; gap: 12px; }
+  header .sub { color: var(--muted); font-size: .85rem; }
+  #steps span { font-size: .72rem; padding: 3px 8px; }
+  /* 舞台は中身がはみ出してもスクロールさせない（お題えらびで舞台ごとずれた 10/16） */
+  #stage { overflow: clip; }
+  /* タイトル画面 */
+  #intro { position: absolute; inset: 0; z-index: 9; display: grid; place-content: center; justify-items: center; gap: 12px; text-align: center; background: radial-gradient(ellipse at center, rgba(40,8,60,.78), rgba(0,0,0,.96)); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+  #intro.hide { display: none; }
+  #intro .logo { font-size: clamp(2.6rem, 9vw, 4.6rem); transform: skewX(-10deg) rotate(-3deg); color: #fff; text-shadow: 4px 4px 0 var(--pink), 8px 8px 0 var(--purple); animation: logoIn .6s cubic-bezier(.2,1.5,.4,1); }
+  @keyframes logoIn { from { transform: skewX(-10deg) rotate(-3deg) scale(2.4); opacity: 0; } }
+  #intro .tag { color: var(--gold); letter-spacing: .1em; }
+  #intro { padding: 16px; }
+  #intro .rivalCard { max-width: 100%; box-sizing: border-box; text-align: left; display: flex; gap: 10px; align-items: center; background: rgba(0,0,0,.55); border: 2px solid #3fa9ff; padding: 6px 14px 6px 6px; transform: skewX(-6deg); }
+  #intro .rivalCard img { width: 64px; height: 64px; object-fit: contain; }
+  #intro .rivalCard b { display: block; color: #3fa9ff; }
+  #intro .rivalCard span { font-size: .85rem; color: var(--muted); }
+  #intro .how { font-size: .8rem; color: var(--muted); max-width: 30em; }
+  #intro button { font-size: 1.4rem; padding: 16px 40px; background: linear-gradient(90deg, var(--pink), var(--purple)); animation: pulse .8s infinite alternate; }
+  /* お題えらび（舞台の上に重ねる） */
+  #topics { position: absolute; inset: 0; z-index: 9; display: none; overflow-y: auto; padding: 18px; background: rgba(8,3,14,.94); margin: 0; }
+  #topics .pick { font-family: "Dela Gothic One", sans-serif; font-size: 1.3rem; color: var(--gold); margin-bottom: 8px; }
+  #topics .topic { transform: none; box-shadow: none; border: 2px solid #3a2050; background: #170a24; padding: 10px 14px; }
+  #topics .topic > span { transform: none; }
+  #topics .topic.chosen { border-color: var(--gold); background: #2c1240; box-shadow: 0 0 16px rgba(255,210,63,.4); }
+  #topics .sides { position: sticky; bottom: 0; background: rgba(8,3,14,.94); padding: 10px 0 2px; }
+  #topics .side { flex: 1; font-size: 1.1rem; }
+  /* 操作ボタン：大きい3つと、小さい補助 */
+  .controls.main { margin-top: 12px; }
+  .controls.main button { flex: 1; min-width: 7em; font-size: 1.15rem; padding: 14px 10px; }
+  button.alt { background: #3a1f9a; }
+  button.gold { background: var(--gold); color: #2b1d10; }
+  .controls.small { margin-top: 8px; gap: 6px; }
+  button.mini { transform: none; box-shadow: none; background: transparent; border: 1px solid #3a2a48; color: var(--muted); font-size: .8rem; padding: 6px 12px; border-radius: 999px; }
+  button.mini > span { transform: none; }
+  button.mini:not(:disabled):hover { color: #fff; border-color: var(--pink); }
+  #status { font-size: .8rem; }
+  /* ひとりのときは天秤と別の点数を出さない（上の点数バーにまとめる） */
+  body.solo #balance, body.solo #score { display: none; }
+  body.solo #feverClock { left: auto; right: 14px; top: 12px; font-size: 1rem; }
   /* ひとりで挑戦の点数 */
-  #soloScore { display: none; position: absolute; left: 50%; top: 34px; transform: translateX(-50%); z-index: 4; gap: 10px; align-items: baseline; background: rgba(0,0,0,.7); padding: 4px 14px; border: 2px solid var(--gold); }
+  #soloScore { display: none; position: absolute; left: 50%; top: 10px; transform: translateX(-50%); z-index: 4; gap: 10px; align-items: baseline; background: rgba(0,0,0,.7); padding: 4px 14px; border: 2px solid var(--gold); }
   #soloScore .me { color: var(--pink); font-size: 1.4rem; }
   #soloScore .rival { color: #3fa9ff; font-size: 1.4rem; }
   #soloScore .vs { color: #fff; }
   #soloScore small { color: var(--muted); font-size: .7rem; margin-left: 6px; font-family: system-ui; }
   /* ひとりで挑戦のお題カード */
-  #topicCard { display: none; margin: 6px 0 10px; padding: 10px 14px; background: #1a0c26; border-left: 6px solid var(--gold); }
+  #topicCard { display: none; margin: 6px 0 10px; padding: 8px 12px; background: #1a0c26; border-left: 6px solid var(--gold); font-size: .9rem; }
   #topicCard b { font-size: 1.1rem; color: var(--gold); }
   #topicCard p { margin: 4px 0; font-size: .9rem; }
   #topicCard .pc { display: flex; gap: 12px; flex-wrap: wrap; font-size: .85rem; }
   #topicCard small { color: var(--muted); }
   #topicCard a { color: var(--gold); }
   /* ひとりで挑戦のお題えらび */
-  #topics { display: none; margin: 10px 0; }
   #topics .pick { margin-bottom: 6px; color: var(--gold); }
   #topics .topic { display: block; width: 100%; text-align: left; margin: 6px 0; }
   #topics .topic b { display: block; font-size: 1.05rem; }
   #topics .topic small { display: block; color: var(--muted); font-size: .8rem; margin-top: 2px; }
   #topics .topic.chosen { background: #4a1d5f; box-shadow: 0 0 0 2px var(--gold), 4px 4px 0 #000; }
-  #topics .sides { display: flex; gap: 8px; margin-top: 10px; }
+  #topics .sides { display: flex; gap: 8px; }
   #status { color: var(--muted); margin: 8px 0; min-height: 1.4em; font-size: .9rem; }
   #evidence { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
   .ev { width: 96px; border: 2px solid var(--gold); overflow: hidden; background: #160a22; font-size: .7rem; text-align: center; }
@@ -224,7 +266,7 @@
 </head>
 <body>
 <main>
-  <header><h1 class="display">おうち裁判</h1></header>
+  <header><h1 class="display">おうち裁判</h1><span class="sub">AIライバルと3分ディベート</span></header>
 
   <div id="steps"></div>
   <div id="topicCard"></div>
@@ -247,28 +289,36 @@
     <div id="result"></div>
     <div id="banner" class="display"></div>
     <div id="paused" class="display">⏸ 一時停止中</div>
+    <div id="intro">
+      <div class="logo display">おうち裁判</div>
+      <div class="tag">AIライバルと 3分ディベートバトル</div>
+      <div class="rivalCard"><img src="img/lawyerD.png" alt=""><div><b class="display">ライバル コン太</b><span id="rivalLine">はじめての対決！</span></div></div>
+      <button id="solo" class="big display"><span>🎤 挑戦する</span></button>
+      <div class="how">お題に「賛成」か「反対」で意見を言おう。理由・具体例・反論で点が入る！</div>
+    </div>
+    <div id="topics"></div>
     <div id="flash"></div>
   </div>
 
-  <div class="controls">
-    <button id="open" class="big display"><span>🆚 対戦で開廷</span></button>
-    <button id="solo" class="big display"><span>🎤 ひとりで挑戦</span></button>
+  <div class="controls main">
     <button id="ronpa" class="display" disabled><span>論破！</span></button>
-    <button id="objection" class="sub" disabled><span>異議あり！</span></button>
-    <button id="evidenceBtn" class="sub" disabled><span>📷 証拠品</span></button>
-    <button id="verdictBtn" class="sub" disabled><span>⚖️ 判決へ</span></button>
-    <button id="turnBtn" class="big display" style="display:none"><span>✋ 以上！</span></button>
-    <button id="pauseBtn" class="sub" disabled><span>⏸ 一時停止</span></button>
-    <button id="close" class="sub" disabled><span>閉廷</span></button>
-    <button id="resume" class="big display"><span>再開する</span></button>
+    <button id="objection" class="display alt" disabled><span>異議あり！</span></button>
+    <button id="turnBtn" class="display gold" style="display:none"><span>✋ 以上！</span></button>
+    <button id="resume" class="display gold"><span>再開する</span></button>
+  </div>
+  <div class="controls small">
+    <button id="evidenceBtn" class="mini" disabled>📷 証拠品</button>
+    <button id="pauseBtn" class="mini" disabled><span>⏸ 一時停止</span></button>
+    <button id="close" class="mini" disabled>✕ 閉廷</button>
+    <button id="verdictBtn" class="mini" disabled style="display:none"><span>⚖️ 判決へ</span></button>
+    <button id="open" class="mini" style="display:none"><span>🆚 対戦で開廷</span></button>
     <input id="pass" type="password">
   </div>
-  <div id="topics"></div>
   <div id="cam"><video id="video" autoplay playsinline muted></video><br><button id="submitEv"><span>この証拠品を突きつける</span></button> <button id="cancelEv" class="sub"><span>やめる</span></button></div>
   <div id="status"></div>
   <div id="evidence"></div>
   <details><summary>法廷記録</summary><pre id="log" style="white-space:pre-wrap"></pre></details>
-  <footer>BGM：魔王魂（maou.audio）<br>飛んでくる発言をタップすると「論破！」。言い分がおかしいと思ったら撃ち抜こう。<br>Alexa+ で「アレクサ、裁判して」と言ったときの体験を、ブラウザで再現したものです。キャラも演出もオリジナルです。判例は名前・争点・判決の要約だけを保存します。</footer>
+  <footer>飛んでくる発言をタップすると「論破！」。<br>BGM：魔王魂（maou.audio）／効果音・声：オリジナル／Alexa+ で「アレクサ、裁判して」と言ったときの体験を、ブラウザで再現したものです。キャラも演出もオリジナルです。判例は名前・争点・判決の要約だけを保存します。</footer>
 </main>
 <script type="module" src="app.js"></script>
 </body>

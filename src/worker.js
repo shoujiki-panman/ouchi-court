@@ -138,7 +138,10 @@ async function verdict(env, { record, names }) {
     .catch((e) => console.log(`file_case failed: ${e}`));
   const winner = decided;
   const stamp = winner === "draw" ? "和解" : winner === (v.defendant || names?.[1]) ? "無罪" : "有罪";
-  const pun = PUNISHMENTS.find((p) => p.id === v.punishment) ?? PUNISHMENTS[Math.floor(Math.random() * PUNISHMENTS.length)];
+  // id が外れたら、セリフに出てくる罰ゲームを探す（セリフは「ポンポコポン」なのに画面は別の罰、が起きた 10/16）
+  const key = (p) => p.text.replace(/[「」（）()]/g, "").slice(0, 6);
+  const said = `${v.punishment ?? ""} ${v.speech ?? ""}`;
+  const pun = PUNISHMENTS.find((p) => p.id === v.punishment) ?? PUNISHMENTS.find((p) => said.includes(key(p))) ?? PUNISHMENTS[Math.floor(Math.random() * PUNISHMENTS.length)];
   return { ...v, panel: votes, stamp, punishment: pun, precedents: prec };
 }
 
@@ -250,7 +253,9 @@ const EVERGREEN = [
   { motion: "小学生もスマホを持っていい？", background: "連絡に便利。でも使いすぎも心配。", detail: "スマホを持つ小学生が増えているよ。家族とすぐ連絡できて安心な反面、ゲームや動画で使いすぎる心配もあるんだ。", pro: "何かあったときにすぐ家族に連絡できる", con: "ゲームや動画ばかりになって、勉強や睡眠がへる", source: null },
 ];
 // 子どもに出さない話題（AI の判断だけに任せない。10/16 トラに襲われて亡くなったニュースがお題になった）
-const UNSAFE = /死|亡くな|殺|遺体|事故|事件|逮捕|容疑|襲|負傷|けが|怪我|災害|地震|津波|火災|火事|台風|大雨|訴|裁判|判決|戦争|攻撃|爆|テロ|銃|自殺|いじめ|虐待|結婚|熱愛|交際|不倫|離婚|破局|妊娠|選挙|首相|大臣|議員|株|円安|物価|ギャンブル|酒|たばこ|薬物/;
+const UNSAFE = /死|亡くな|殺|遺体|事故|事件|逮捕|容疑|襲|負傷|けが|怪我|災害|地震|津波|火災|火事|台風|大雨|訴|裁判|判決|戦争|攻撃|爆|テロ|銃|自殺|いじめ|虐待|結婚|熱愛|交際|不倫|離婚|破局|妊娠|選挙|首相|大臣|議員|株|円安|物価|ギャンブル|酒|たばこ|薬物|降板|謝罪|声明|不祥事|活動休止|炎上|処分|税|病|入院|死去|訃報/;
+// 日本語のニュースだけ（Googleトレンドには外国語の見出しが混ざる 10/16）
+const JAPANESE = /[ぁ-んァ-ヶ]/;
 async function topics(env) {
   let items = [];
   let src = { title: "Googleトレンド（いま話題）", url: "https://trends.google.co.jp/trending?geo=JP" };
@@ -263,7 +268,7 @@ async function topics(env) {
         const n = m[1].match(/<ht:news_item_title>([\s\S]*?)<\/ht:news_item_title>/)?.[1] ?? "";
         return `${t}：${n}`.replace(/&amp;/g, "&").replace(/&#39;/g, "'").replace(/&quot;/g, '"');
       })
-      .filter((t) => !UNSAFE.test(t))
+      .filter((t) => !UNSAFE.test(t) && JAPANESE.test(t))
       .slice(0, 25);
   } catch {}
   if (!items.length) try {
@@ -279,21 +284,42 @@ async function topics(env) {
   } catch {}
   let picked = [];
   if (items.length) {
+    // 1段目：番号で3つ選んでお題にする。2段目：説明は、選んだニュース1本だけを見せて書かせる
+    // （一度に書かせると、別のニュースの説明が混ざった 10/16「スポーツの試合」のお題にマツダの説明）
     const v = await within(
       ask(
         env,
         "@cf/mistralai/mistral-small-3.1-24b-instruct",
-        "いま話題のキーワードとニュースの一覧から、小学生が賛成・反対で楽しく議論できる話題を3つ選ぶ。人が亡くなった・けがをした・災害・事件・裁判・戦争・政治家の争い・芸能人の恋愛や結婚・お金のもうけ話は選ばない（スポーツ・ゲーム・食べ物・動物・科学・発明・記録・季節の行事などがよい）。" +
+        "いま話題のキーワードとニュースの番号つき一覧から、小学生が賛成・反対で楽しく議論できる話題を3つ選ぶ。人が亡くなった・けがをした・災害・事件・裁判・戦争・政治家の争い・芸能人の恋愛や結婚・お金のもうけ話は選ばない（スポーツ・ゲーム・食べ物・動物・科学・発明・記録・季節の行事などがよい）。" +
           "それぞれを、そのニュースから広げた「意見が分かれる」お題にする。ニュースの事実をそのまま聞くのではなく、子どもが自分の考えで賛成・反対を言えるもの。" +
           "例: 女性が初めて棋士になった → 「スポーツやゲームは、男女いっしょの大会にするべき？」／ノーベル賞の研究 → 「すぐ役に立たない研究にも、お金を使うべき？」。" +
-          "background はニュースを10歳にも分かる言葉で一言（〜だよ。の口調）。detail は、何があったか・なぜ話題か を10歳に分かる言葉で2〜3文（ニュースに書いていない事実を付け足さない。分からない所は「〜らしい」「〜と話題」にとどめる）。pro と con は、賛成派・反対派がよく言いそうな理由を1つずつ（子どもの言葉で）。" +
-          '出力は JSON だけ: {"topics": [{"motion": "お題（25字以内）", "background": "一言の背景（40字以内）", "detail": "2〜3文の説明", "pro": "賛成の理由の例", "con": "反対の理由の例", "news": "元のニュースを短く"}]}',
-        items.join("\n"),
-        1400,
+          '出力は JSON だけ: {"topics": [{"n": 一覧の番号, "motion": "お題（25字以内）"}]}',
+        items.map((t, i) => `${i}. ${t}`).join("\n"),
+        500,
       ),
-      20000,
+      12000,
     ).catch(() => null);
-    picked = (v?.topics ?? []).filter((t) => t?.motion && !UNSAFE.test(`${t.motion}${t.detail}${t.news}${t.background}`)).slice(0, 3).map((t) => ({ motion: t.motion, background: t.background, detail: t.detail, pro: t.pro, con: t.con, source: { ...src, news: t.news } }));
+    const chosen = (v?.topics ?? []).filter((t) => t?.motion && items[Number(t.n)] && !UNSAFE.test(t.motion)).slice(0, 3);
+    picked = (
+      await Promise.all(
+        chosen.map(async (t) => {
+          const news = items[Number(t.n)];
+          const d = await within(
+            ask(
+              env,
+              "@cf/mistralai/mistral-small-3.1-24b-instruct",
+              `お題「${t.motion}」の説明を、下のニュース1本だけをもとに書く。background はニュースを10歳にも分かる言葉で一言（〜だよ。の口調・40字以内）。detail は、何があったか・なぜ話題か を10歳に分かる言葉で2〜3文（ニュースに書いていない事実を付け足さない。年・日付・数字はニュースに書いてあるものだけ。分からない所は「〜らしい」「〜と話題」にとどめる）。pro と con は、賛成派・反対派がよく言いそうな理由を1つずつ（子どもの言葉で）。` +
+                '出力は JSON だけ: {"background": "...", "detail": "...", "pro": "...", "con": "..."}',
+              news,
+              500,
+            ),
+            12000,
+          ).catch(() => null);
+          if (!d?.detail || UNSAFE.test(`${d.detail}${d.background}`)) return null;
+          return { motion: t.motion, background: d.background, detail: d.detail, pro: d.pro, con: d.con, source: { ...src, news } };
+        }),
+      )
+    ).filter(Boolean);
   }
   return { topics: [...picked, ...EVERGREEN].slice(0, 5) };
 }

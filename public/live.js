@@ -36,7 +36,11 @@ export class Speaker {
     const at = Math.max(this.ctx.currentTime + 0.03, this.next);
     src.start(at);
     this.next = at + buf.duration;
-    return new Promise((done) => src.addEventListener("ended", done));
+    // 「鳴り終わり」が来ないこともある（画面が裏にあるとき等）ので、長さ＋1秒で見切る
+    return new Promise((done) => {
+      src.addEventListener("ended", done);
+      setTimeout(done, (buf.duration + 1) * 1000);
+    });
   }
   play(b64, rate = 24000) {
     const bytes = fromBase64(b64);
