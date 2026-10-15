@@ -743,6 +743,43 @@ let soloScore = { player: 0, rival: 0 };
 let ronpaArmed = false;
 let arguing = false, rounds = 0, best = { text: "", strength: -1 }, hints = [], soloClock, soloLeft = 180;
 let rivalInfo = { level: 1, wins: 0, losses: 0, draws: 0 };
+// バッジ：遊ぶたびに集まる（この端末に保存。消えても遊べる）
+const BADGES = [
+  { id: "first", icon: "🎤", name: "はじめての法廷", how: "1回あそぶ", ok: (g) => true },
+  { id: "win", icon: "🏆", name: "はじめての勝訴", how: "コン太に勝つ", ok: (g) => g.win },
+  { id: "perfect", icon: "💥", name: "完全論破", how: "3ラウンドぜんぶ勝つ", ok: (g) => g.perfect },
+  { id: "example", icon: "📚", name: "具体例マスター", how: "具体例を3回入れる", ok: (g) => g.examples >= 3 },
+  { id: "counter", icon: "🛡️", name: "反論キング", how: "コン太の反論に2回こたえる", ok: (g) => g.counters >= 2 },
+  { id: "ronpa", icon: "🔫", name: "論破スナイパー", how: "「論破！」を決める", ok: (g) => g.ronpa > 0 },
+  { id: "extra", icon: "⚡", name: "延長戦サバイバー", how: "異変の延長戦で勝つ", ok: (g) => g.win && g.extra },
+  { id: "sudden", icon: "💀", name: "サドンデス勝利", how: "サドンデスで勝つ", ok: (g) => g.win && g.sudden },
+  { id: "score20", icon: "🔥", name: "20点の壁", how: "1試合で20点とる", ok: (g) => g.score >= 20 },
+  { id: "news", icon: "🗞️", name: "ニュース通", how: "いま話題のお題で勝つ", ok: (g) => g.win && g.news },
+  { id: "both", icon: "🌈", name: "どっちも言える", how: "賛成と反対の両方で勝つ", ok: (g) => g.sidesWon.includes("賛成") && g.sidesWon.includes("反対") },
+  { id: "lv5", icon: "👑", name: "コン太Lv5撃破", how: "Lv5のコン太に勝つ", ok: (g) => g.win && g.level >= 5 },
+];
+const store = {
+  get: (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } },
+  set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+let startLevel = 1;
+function earnBadges(result) {
+  const have = store.get("ouchi.badges", []);
+  const sidesWon = store.get("ouchi.sidesWon", []);
+  if (result === "win" && !sidesWon.includes(side)) sidesWon.push(side);
+  store.set("ouchi.sidesWon", sidesWon);
+  const g = { win: result === "win", perfect: result === "win" && roundWins.player >= rounds && rounds >= 3, examples: breakdown.example, counters: breakdown.counter, ronpa: breakdown.ronpa, extra: extraRound, sudden: suddenDeath, score: soloScore.player, news: !!topic?.source, sidesWon, level: startLevel };
+  const fresh = BADGES.filter((b) => !have.includes(b.id) && b.ok(g));
+  store.set("ouchi.badges", [...have, ...fresh.map((b) => b.id)]);
+  return fresh;
+}
+function showShelf() {
+  const have = store.get("ouchi.badges", []);
+  const next = BADGES.find((b) => !have.includes(b.id));
+  $("badgeShelf").innerHTML = BADGES.map((b) => `<span class="b ${have.includes(b.id) ? "" : "off"}" title="${b.name}：${b.how}">${have.includes(b.id) ? b.icon : "？"}</span>`).join("") +
+    `<div class="next">バッジ ${have.length}/${BADGES.length}${next ? `｜つぎ：${next.icon} ${next.how}` : "｜ぜんぶ集めた！"}</div>`;
+}
+showShelf();
 function showSoloScore() {
   const label = gameOver ? "試合終了" : extraRound ? "⚡延長戦 ×2" : suddenDeath ? "サドンデス" : rounds >= 3 ? "試合終了" : rounds === 2 ? "最終ラウンド ×2" : `ラウンド ${rounds + 1}/3`;
   $("soloScore").innerHTML = `<span class="me">あなた ${soloScore.player}</span><span class="vs">-</span><span class="rival">${soloScore.rival} コン太</span><small>${label}｜コン太 Lv${rivalInfo.level}</small>`;
@@ -925,12 +962,14 @@ async function adjourn() {
 // 結果カード（ひとりで挑戦）：お題・勝ち負け・スコア・いちばん良かった一言・コーチの総評・コン太の一言
 async function resultCard(result, v) {
   const rv = rivalInfo;
+  const newBadges = earnBadges(result);
   const rivalLine = result === "win" ? `くっ…次は負けないぞ！（コン太 Lv${Math.min(5, (rv.level ?? 1))} にパワーアップ）` : result === "lose" ? "ふふん、ぼくの勝ち！でもいい勝負だったよ" : "引き分けか…次こそ決着をつけよう！";
   $("result").innerHTML = `<div class="card">
     <div class="rt display">${{ win: "勝訴！", lose: "敗訴…", draw: "引き分け" }[result]}</div>
     <div class="rs display">あなた ${soloScore.player} - ${soloScore.rival} コン太</div>
     <div class="rq">お題：${topic?.motion ?? ""}（あなたは${side}）</div>
     <div class="rq">内訳：理由 ${breakdown.reason}｜具体例 ${breakdown.example}｜反論に答えた ${breakdown.counter}｜論破 ${breakdown.ronpa}｜使い回し ${breakdown.repeat}｜ラウンド勝ち ${roundWins.player}/${rounds}${suddenDeath ? "｜サドンデス" : ""}${extraRound ? "｜延長戦" : ""}</div>
+    ${newBadges.length ? `<div class="nb display">NEW バッジ！ ${newBadges.map((b) => `${b.icon} ${b.name}`).join("　")}</div>` : ""}
     <div class="rb"><b>きょうの名言</b>「${best.text || "（また次回！）"}」</div>
     <div class="rc"><img src="img/lawyerP.png" alt=""><span><b>ポン子の作戦メモ（次はこうすると強いよ）</b>${hints.length ? hints.slice(-2).map((h) => `・${h}`).join("<br>") : "考えを自分の言葉で言えたのがすごい！"}</span></div>
     <div class="rc"><img src="img/lawyerD.png" alt=""><span><b>ライバル コン太</b>${rivalLine}</span></div>
@@ -1113,6 +1152,7 @@ function closeCourt() {
   setTimeout(() => {
     $("intro").classList.remove("hide");
     loadRival();
+    showShelf();
   }, 1500);
   beat?.stop();
   stopMic?.();
@@ -1177,6 +1217,7 @@ $("solo").onclick = async () => {
       try {
         rivalInfo = await api("/api/rival", {});
         rivalInfo.lastResult = rivalInfo.history?.at(-1)?.result;
+        startLevel = rivalInfo.level ?? 1;
       } catch {}
       $("topics").style.display = "none";
       // お題は1行。くわしくは開いたときだけ（PCでスクロールが要った 10/16）

@@ -32,12 +32,12 @@
   .seat span { position: absolute; top: calc(100% + 3px); left: 50%; transform: translateX(-50%); font-size: .66rem; background: rgba(0,0,0,.75); border: 1px solid var(--pink); padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
 
   /* 話している人（大きく） */
-  #hero { position: absolute; left: 50%; bottom: 122px; width: 250px; height: 250px; transform: translateX(-50%); transition: opacity .25s, transform .35s; filter: drop-shadow(0 8px 14px rgba(0,0,0,.6)); }
+  #hero { position: absolute; left: 50%; bottom: 36px; width: min(300px, 68%); height: min(300px, 66%); transform: translateX(-50%); transition: opacity .25s, transform .35s; filter: drop-shadow(0 8px 14px rgba(0,0,0,.6)); }
   #hero img { width: 100%; height: 100%; object-fit: contain; }
   #hero.swap { opacity: 0; transform: translateX(-30%) scale(.9); }
   /* キャラの動き：ふだんは息をする／話すと声の大きさで伸び縮み（--amp）／登場・異議・判決の動き */
-  #hero img { transform-origin: 50% 100%; animation: breathe 3.2s ease-in-out infinite; transform: translateY(calc(var(--amp, 0) * -14px)) scaleY(calc(1 + var(--amp, 0) * .07)) scaleX(calc(1 - var(--amp, 0) * .03)); transition: transform .06s; }
-  @keyframes breathe { 50% { translate: 0 -4px; rotate: .6deg; } }
+  #hero img { transform-origin: 50% 100%; animation: breathe 3.2s ease-in-out infinite; transform: translateY(calc(var(--amp, 0) * -5px)) scaleY(calc(1 + var(--amp, 0) * .025)); transition: transform .12s ease-out; }
+  @keyframes breathe { 50% { translate: 0 -3px; } }
   #hero.enter-left { animation: enterL .45s cubic-bezier(.2,1.4,.4,1); }
   #hero.enter-right { animation: enterR .45s cubic-bezier(.2,1.4,.4,1); }
   #hero.enter-zoom { animation: enterZ .5s cubic-bezier(.2,1.4,.4,1); }
@@ -45,11 +45,11 @@
   @keyframes enterL { from { translate: -60% 0; opacity: 0; } }
   @keyframes enterR { from { translate: 60% 0; opacity: 0; } }
   @keyframes enterZ { from { scale: .3; opacity: 0; } }
-  @keyframes enterS { from { rotate: -360deg; scale: .2; opacity: 0; } }
+  @keyframes enterS { from { rotate: -20deg; scale: .6; opacity: 0; } }
   #hero.lunge { animation: lunge .55s ease-out; }
-  @keyframes lunge { 30% { scale: 1.25; translate: 0 -10px; } 60% { scale: 1.12; } }
+  @keyframes lunge { 30% { scale: 1.1; translate: 0 -6px; } 60% { scale: 1.04; } }
   #hero.slam img { animation: slam .5s ease-in; }
-  @keyframes slam { 30% { rotate: -10deg; } 55% { rotate: 6deg; scale: 1.06; } 100% { rotate: 0; } }
+  @keyframes slam { 30% { rotate: -5deg; } 55% { rotate: 3deg; scale: 1.03; } 100% { rotate: 0; } }
   #speed { position: absolute; inset: -20%; z-index: 1; pointer-events: none; opacity: 0;
     background: repeating-conic-gradient(from 0deg at 50% 55%, rgba(255,255,255,.18) 0deg 2deg, transparent 2deg 9deg); }
   #speed.on { animation: speed .7s ease-out; }
@@ -285,6 +285,19 @@
   /* 異変ルーレット：画面が乱れる */
   #stage.glitch { animation: glitch .18s steps(2) infinite; }
   @keyframes glitch { 0% { filter: hue-rotate(0deg); transform: translate(0); } 50% { filter: hue-rotate(140deg) saturate(2); transform: translate(-4px, 2px) skewX(-2deg); } 100% { filter: hue-rotate(260deg) invert(.15); transform: translate(3px, -2px); } }
+  /* バッジ（何度も遊びたくなる集めもの） */
+  #badgeShelf { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; max-width: 30em; }
+  #badgeShelf .b { width: 30px; height: 30px; display: grid; place-items: center; font-size: 1.1rem; background: rgba(255,255,255,.08); border-radius: 50%; }
+  #badgeShelf .b.off { filter: grayscale(1); opacity: .35; }
+  #badgeShelf .next { width: 100%; font-size: .78rem; color: var(--gold); margin-top: 2px; }
+  #result .nb { background: linear-gradient(90deg, rgba(255,210,63,.25), rgba(255,79,163,.25)); padding: 6px; margin: 6px 0; font-size: .9rem; animation: slamIn .5s; }
+  /* タイトル画面を舞台の高さに収める */
+  #intro { gap: 8px; overflow-y: auto; }
+  #intro .logo { font-size: clamp(2rem, 7.5vh, 4.6rem); }
+  #intro .rivalCard img { width: 48px; height: 48px; }
+  #intro button { padding: 12px 34px; font-size: 1.2rem; }
+  #badgeShelf .b { width: 24px; height: 24px; font-size: .9rem; }
+  @media (max-height: 820px) { #intro .how, #intro .tag { display: none; } }
 </style>
 </head>
 <body>
@@ -316,6 +329,7 @@
       <div class="logo display">おうち裁判</div>
       <div class="tag">AIライバルと 3分ディベートバトル</div>
       <div class="rivalCard"><img src="img/lawyerD.png" alt=""><div><b class="display">ライバル コン太</b><span id="rivalLine">はじめての対決！</span></div></div>
+      <div id="badgeShelf"></div>
       <button id="solo" class="big display"><span>🎤 ひとりで挑戦</span></button>
       <button id="open" class="versusBtn display"><span>🆚 ふたりで対戦（けんかの裁判）</span></button>
       <div class="how">お題に「賛成」か「反対」で意見を言おう。理由・具体例・反論で点が入る！</div>
