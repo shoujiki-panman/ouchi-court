@@ -5,18 +5,19 @@ import { sfx } from "./sfx.js";
 import { PUNISHMENTS } from "./punishments.js";
 
 const BAILIFF = `あなたは家庭の法廷「おうち裁判」の書記官タヌ吉です。きょうだいや家族の小さなけんかを、テレビのゲームショーのようにテンション高く、楽しく進行します。相手は5〜10歳の子どもと、その親。
-登場するのは: 原告と被告（子ども）、原告側の弁護人ポン子、被告側の弁護人コン太（どちらもあなたが声色を変えて演じる。必ず「弁護人ポン子です」「弁護人コン太です」と名乗ってから話す）、証人（見ていた親など）、そして判決を出す裁判長タヌキと3人の判事（別の係。call_judge で呼ぶ）。
+登場するのは: 原告と被告（子ども）、調査官ホー（フクロウの探偵。investigate で呼ぶ。調べものと再現イラストの係）、原告側の弁護人ポン子、被告側の弁護人コン太（どちらもあなたが声色を変えて演じる。必ず「弁護人ポン子です」「弁護人コン太です」と名乗ってから話す）、証人（見ていた親など）、そして判決を出す裁判長タヌキと3人の判事（別の係。call_judge で呼ぶ）。
 段取り（急がない。子どもが言い合いを楽しめるように、各段でしっかり時間をとる）:
 1. 開廷を宣言し、原告に名前と、何があったかを聞く。弁護人ポン子として「つまり〇〇さんは、〜と言いたいのですね？」と整理する。
 2. 被告に名前と言い分を聞く。弁護人コン太として同じように整理する。
 3. 「議論タイム、スタート！」と宣言する。「おかしいと思ったら『異議あり！』、相手の言葉をやっつけたいときは『論破！』と言ってね」と伝える。原告と被告に交互に、相手の言い分への言い返しを聞く。2〜3往復するまで続ける。弁護人も時々「異議あり！」と言って盛り上げてよい。
-4. 「証拠品タイム！」と宣言する。「証拠になる物はある？あったら証拠品ボタンでカメラに見せてね」と聞く。証拠品が届いたら何が写っているか言う。見ていた人がいれば証人として呼ぶ。
+4. 「証拠品タイム！」と宣言する。「証拠になる物はある？あったら証拠品ボタンでカメラに見せてね」と聞く。証拠品が届いたら何が写っているか言う。見ていた人がいれば証人として呼ぶ。証拠がないときや、事実を確かめたいときは「調査官ホー、出番です！」と言って investigate を呼ぶ（調べるなら search、その場面を絵にするなら illustrate）。
 5. 二人に、最後に言っておきたいことを1つずつ聞く。
 6. 「判決が聞きたくなったら、判決ボタンを押すか『判決お願いします』と言ってね」と言う。だれかが「判決お願いします」と言うか、判決ボタンが押されるまで call_judge は絶対に呼ばない。それまでは議論や証拠品を続けてよい。
 7. 判決のあと、罰ゲームがちゃんとできたかを楽しく確かめ、「これにて閉廷！」で締める。
 法廷ドラマの決まり:
 - 誰かが「論破！」と言ったら（または論破の知らせが届いたら）、「おおっと、論破が出ました！」と盛り上げ、論破した人に名前と、どこがおかしいと思ったかを聞く。そのあと論破された側にも言い分を聞く。
-- 誰かが「異議あり！」と言ったら、「異議を認めます。どうぞ」と言って、その人の話を聞く。
+- 誰かが「異議あり！」と言ったら、「異議を認めます。どうぞ」と言って、その人の話を聞く。弁護人の割り込み（知らせが届く）も同じように受ける。
+- だれかが「調べて」「本当？」「証拠がほしい」と言ったら、いつでも investigate を呼んでよい。
 守ること: 次に話す人を必ず名前で呼ぶ。1回に聞くことは1つだけ。1回のせりふは2文まで。子どもが話している途中で口をはさまない。話がそれたらやさしく戻す。どちらかを悪者にしない。恥ずかしい思いをさせない。日本語で話す。`;
 
 const CALL_JUDGE = {
@@ -35,16 +36,31 @@ const CALL_JUDGE = {
 };
 
 // 舞台に立つ人
+const INVESTIGATE = {
+  name: "investigate",
+  description: "調査官ホー（フクロウの探偵）に調べてもらう。だれかが「調べて」「本当？」「証拠がほしい」と言ったとき、証拠品タイムに証拠が足りないとき、事実を確かめたいときに呼ぶ。mode=search は資料を調べる、mode=illustrate はその場面の再現イラストを作る。",
+  parameters: {
+    type: "OBJECT",
+    properties: {
+      query: { type: "STRING", description: "調べること、または再現したい場面（日本語で短く）" },
+      mode: { type: "STRING", enum: ["search", "illustrate"], description: "search=調べる / illustrate=再現イラスト" },
+    },
+    required: ["query", "mode"],
+  },
+  behavior: "BLOCKING",
+};
+
 const CAST = {
   judge: { img: "img/judge.jpg", name: "裁判長タヌキ" },
   bailiff: { img: "img/bailiff.jpg", name: "書記官タヌ吉" },
   lawyerP: { img: "img/lawyerP.jpg", name: "弁護人ポン子" },
   lawyerD: { img: "img/lawyerD.jpg", name: "弁護人コン太" },
   witness: { img: "img/witness.jpg", name: "証言台" },
+  detective: { img: "img/detective.jpg", name: "調査官ホー" },
 };
 
 // 円形の法廷に席を並べる（裁判長が上、まわりに書記官・弁護人・証言台）
-const SEATS = { judge: [50, 3], bailiff: [15, 14], lawyerP: [85, 14], lawyerD: [14, 44], witness: [86, 44] };
+const SEATS = { judge: [50, 3], bailiff: [15, 14], lawyerP: [85, 14], lawyerD: [14, 44], witness: [86, 44], detective: [50, 58] };
 for (const [id, [x, y]] of Object.entries(SEATS)) {
   const el = document.createElement("div");
   el.className = "seat";
@@ -108,6 +124,7 @@ function flyStatement(text) {
   lastStatement = t;
   heat(8);
   react("statement");
+  lawyersCheck(t);
   const el = document.createElement("div");
   el.className = "fly display";
   el.style.top = `${18 + Math.random() * 38}%`;
@@ -196,7 +213,7 @@ async function openCourt(resume = false) {
       setup: {
         generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Puck" } } } },
         systemInstruction: { parts: [{ text: BAILIFF }] },
-        tools: [{ functionDeclarations: [CALL_JUDGE] }],
+        tools: [{ functionDeclarations: [CALL_JUDGE, INVESTIGATE] }],
         inputAudioTranscription: {},
         outputAudioTranscription: {},
         realtimeInputConfig: { automaticActivityDetection: { silenceDurationMs: 1200 } },
@@ -257,7 +274,7 @@ async function openCourt(resume = false) {
           closeNote();
           setTimeout(() => !speaker.busy && talk(false), 400);
         },
-        toolCall: (calls) => calls.forEach(judge),
+        toolCall: (calls) => calls.forEach((c) => (c.name === "investigate" ? investigateCall(c) : judge(c))),
         goAway: () => status("まもなく接続が切れます（10分ごと）"),
         closed: (e) => {
           if (userClosed) return status("閉廷しました");
@@ -361,6 +378,16 @@ async function feverTime() {
   heatVal = 30;
   heat(0);
 }
+function bigScore(title, plus, total) {
+  const el = document.createElement("div");
+  el.className = "bigScore display";
+  el.innerHTML = `<div>${title}</div><div class="plus">${plus}</div><div class="total">合計 ${total}pt</div>`;
+  $("stage").append(el);
+  $("score").classList.remove("bump");
+  void $("score").offsetWidth;
+  $("score").classList.add("bump");
+  setTimeout(() => el.remove(), 2200);
+}
 function popAt(text, x = 50, y = 40) {
   const el = document.createElement("div");
   el.className = "pop display";
@@ -380,7 +407,7 @@ function score(n, label) {
   points += n * combo * (fever ? 3 : 1);
   $("pts").textContent = points;
   $("combo").textContent = combo > 1 ? `×${combo} COMBO` : "";
-  popAt(`${label} +${n * combo * (fever ? 3 : 1)}${fever ? " FEVER×3" : ""}`, 30 + Math.random() * 40, 25 + Math.random() * 20);
+  bigScore(`${label}成功！`, `+${n * combo * (fever ? 3 : 1)}pt${combo > 1 ? `  ×${combo} COMBO` : ""}${fever ? "  FEVER×3" : ""}`, points);
   if (speaker) sfx.coin(speaker.ctx);
 }
 // 観客：声（public/crowd/）と、後ろを流れるテロップ
@@ -518,6 +545,67 @@ async function voteTime(panel) {
   }
   await new Promise((r) => setTimeout(r, 1500));
   $("vote").classList.remove("on");
+}
+
+// 調査官ホーの出番：調べるか、再現イラストを作って、証拠品ファイルに入れる
+async function investigateCall(call) {
+  const { query = "", mode = "search" } = call.args ?? {};
+  onStage("detective", mode === "illustrate" ? `再現イラストを作成中…「${query}」` : `調査中…「${query}」`, { fresh: true });
+  shout("調査開始！");
+  heat(10);
+  try {
+    const r = await api("/api/investigate", { query, mode });
+    const label = `証拠品${evidence.length + 1}：${r.caption}`;
+    const card = document.createElement("div");
+    card.className = "ev";
+    if (r.image) {
+      const url = `data:image/jpeg;base64,${r.image}`;
+      card.innerHTML = `<img src="${url}" alt=""><div>${label}</div>`;
+      evidence.push({ label, dataUrl: url });
+      live.send({ realtimeInput: { video: { data: r.image, mimeType: "image/jpeg" } } });
+    } else {
+      card.innerHTML = `<div style="padding:6px;text-align:left;font-size:.68rem">🔍 ${r.finding}${r.sources?.length ? `<br><a href="${r.sources[0].url}" target="_blank" style="color:#ffd23f">出典：${r.sources[0].title}</a>` : ""}</div><div>${label}</div>`;
+      evidence.push({ label: `${label}（${r.finding}）` });
+    }
+    $("evidence").append(card);
+    showEvidence(card);
+    evidenceCount++;
+    score(80, "証拠");
+    shout("証拠品、発見！");
+    onStage("detective", r.finding, { fresh: true });
+    note("調査官ホー", `${label}: ${r.finding}`);
+    live.toolResponse([{ id: call.id, name: call.name, response: { result: `調査官ホーの報告（画面に証拠品として出した）: ${r.finding}。書記官はこの証拠品がだれの言い分に関係するかを二人に聞く。` } }]);
+  } catch (e) {
+    live.toolResponse([{ id: call.id, name: call.name, response: { result: "調査官ホーは調べきれなかった。書記官は二人に、ほかに証拠がないか聞く。" } }]);
+  }
+}
+function showEvidence(card) {
+  const big = card.cloneNode(true);
+  big.className = "evBig";
+  $("stage").append(big);
+  setTimeout(() => big.remove(), 4500);
+}
+
+// 弁護人が自分から割り込む：子どもの発言のたびに、2人の弁護人（別々の AI）が「異議あり」をするか決める
+let lastObjector = "", lawyerBusy = false;
+async function lawyersCheck(statement) {
+  if (!live || judging || lawyerBusy) return;
+  lawyerBusy = true;
+  try {
+    const recent = record.slice(-8).map((r) => `${r.who}: ${r.text}`).join("\n");
+    const r = await api("/api/lawyers", { record: recent, last: statement });
+    if (r.id && r.id !== lastObjector) {
+      lastObjector = r.id;
+      onStage(r.id, r.line, { fresh: true });
+      objectionCount++;
+      heat(15);
+      react("objection");
+      await shout("異議あり！");
+      note(r.name, r.line);
+      live.send({ clientContent: { turns: [{ role: "user", parts: [{ text: `（${r.name}が割り込みました:「${r.line}」。書記官は「異議を認めます」と言い、${r.name}の言い分を受けて、相手の子に聞いてください）` }] }], turnComplete: true } });
+    } else lastObjector = "";
+  } catch {}
+  lawyerBusy = false;
 }
 
 // 証拠品：カメラで撮って Live に見せる（判事にも名前を渡す）

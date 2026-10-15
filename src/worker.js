@@ -142,6 +142,89 @@ async function verdict(env, { record, names }) {
   return { ...v, panel: votes, stamp, punishment: pun, precedents: prec };
 }
 
+// Workers AI に JSON で答えさせる小さな道具
+async function ask(env, model, system, user, maxTokens = 220) {
+  const out = await env.AI.run(model, {
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: user },
+    ],
+    max_tokens: maxTokens,
+    temperature: 0.6,
+    response_format: { type: "json_object" },
+  });
+  const r = out.response ?? out.choices?.[0]?.message?.content;
+  return typeof r === "string" ? parseJson(r) : r;
+}
+const within = (p, ms) => Promise.race([p, new Promise((_, no) => setTimeout(() => no(new Error("timeout")), ms))]);
+
+// 弁護人（2人とも別の AI）：相手の発言が自分の依頼人に不利・言いすぎ・食い違いなら「異議あり！」と割り込む
+const LAWYERS = [
+  { id: "lawyerP", name: "弁護人ポン子", side: "原告", model: "@cf/mistralai/mistral-small-3.1-24b-instruct" },
+  { id: "lawyerD", name: "弁護人コン太", side: "被告", model: "@cf/meta/llama-4-scout-17b-16e-instruct" },
+];
+async function lawyers(env, { record, last, plaintiff, defendant }) {
+  const votes = await Promise.all(
+    LAWYERS.map((l) =>
+      within(
+        ask(
+          env,
+          l.model,
+          `あなたは家庭の法廷の${l.name}。${l.side}（${l.side === "原告" ? plaintiff ?? "原告" : defendant ?? "被告"}）の味方。` +
+            "いちばん新しい発言が、あなたの依頼人に不利・決めつけ・言いすぎ・前と食い違う なら、子どもにも分かる言葉で「異議あり！」と割り込む。依頼人自身の発言や、問題ない発言には割り込まない。" +
+            '出力は JSON だけ: {"object": true か false, "line": "異議あり！から始まる40字以内のひとこと"}',
+          `これまで:\n${record}\n\nいちばん新しい発言: ${last}`,
+        ),
+        4000,
+      )
+        .then((v) => ({ ...l, object: !!v?.object && !!v?.line, line: String(v?.line ?? "").slice(0, 60) }))
+        .catch(() => ({ ...l, object: false })),
+    ),
+  );
+  const pick = votes.find((v) => v.object);
+  return pick ? { id: pick.id, name: pick.name, line: pick.line } : { id: null };
+}
+
+// 調査官ホー：「調べる」は Wikipedia（鍵いらず）を引いて子ども向けにまとめる。「再現」は状況の絵を描く（Workers AI の画像モデル）
+async function investigate(env, { query, mode }) {
+  if (mode === "illustrate") {
+    const p = await within(
+      ask(env, "@cf/mistralai/mistral-small-3.1-24b-instruct", '子どものけんかの場面を、絵を描く AI への英語の指示に直す。出力は JSON だけ: {"prompt": "英語で1文", "caption": "日本語で15字以内の題"}', query),
+      6000,
+    );
+    const img = await env.AI.run("@cf/black-forest-labs/flux-1-schnell", {
+      prompt: `${p.prompt}. Cute anime illustration, evidence photo style, bright, kid-friendly, no text.`,
+      steps: 6,
+    });
+    return { kind: "illustrate", caption: p.caption || "再現イラスト", image: img.image, finding: `再現イラスト「${p.caption}」を作りました。` };
+  }
+  const api = (q) => `https://ja.wikipedia.org/w/api.php?${q}&format=json&origin=*`;
+  const hdr = { headers: { "user-agent": "ouchi-court/0.1 (family mock trial; https://ouchi-court.panman.workers.dev)" } };
+  // 長い問いのままだと関係ない記事が出る（10/16）。先に検索の言葉を1〜2語に絞る
+  const kw = await within(ask(env, "@cf/mistralai/mistral-small-3.1-24b-instruct", '問いを、百科事典で引く日本語の見出し語1〜2語に直す。出力は JSON だけ: {"words": "語 語"}', query, 60), 4000).catch(() => ({ words: query }));
+  const hits = (await (await fetch(api(`action=query&list=search&srlimit=2&srsearch=${encodeURIComponent(kw.words || query)}`), hdr)).json()).query?.search ?? [];
+  let text = "";
+  const sources = [];
+  for (const h of hits) {
+    const page = Object.values((await (await fetch(api(`action=query&prop=extracts&exintro=1&explaintext=1&titles=${encodeURIComponent(h.title)}`), hdr)).json()).query?.pages ?? {})[0];
+    if (page?.extract) {
+      text += `【${h.title}】${page.extract.slice(0, 700)}\n`;
+      sources.push({ title: h.title, url: `https://ja.wikipedia.org/wiki/${encodeURIComponent(h.title)}` });
+    }
+  }
+  const v = await within(
+    ask(
+      env,
+      "@cf/mistralai/mistral-small-3.1-24b-instruct",
+      "あなたは家庭の法廷の調査官ホー（フクロウの探偵）。調べた資料をもとに、問いに子どもにも分かる言葉で2文以内で答える。資料に答えがなければ「資料では分からなかった」と正直に言い、一般的な考え方を1文添える。" +
+        '出力は JSON だけ: {"finding": "...", "title": "証拠品の名前（10字以内）", "used": "資料が答えに役立ったら true、関係なかったら false"}',
+      `問い: ${query}\n\n資料:\n${text || "（見つからなかった）"}`,
+    ),
+    7000,
+  );
+  return { kind: "search", caption: v.title || "調査結果", finding: v.finding, sources: v.used === true || v.used === "true" ? sources : [] };
+}
+
 // 判事の声（24kHz の PCM を base64 で返す）
 async function voice(env, text) {
   const out = await gemini(env, env.JUDGE_TTS_MODEL, {
@@ -179,6 +262,8 @@ export default {
       if (pathname === "/api/token") return json(await token(env));
       if (pathname === "/api/verdict") return json(await verdict(env, await request.json()));
       if (pathname === "/api/voice") return json(await voice(env, (await request.json()).text));
+      if (pathname === "/api/lawyers") return json(await lawyers(env, await request.json()));
+      if (pathname === "/api/investigate") return json(await investigate(env, await request.json()));
       return json({ error: "not found" }, 404);
     } catch (e) {
       console.log(`${pathname} failed: ${e}`);
