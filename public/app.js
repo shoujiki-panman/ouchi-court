@@ -234,8 +234,8 @@ async function openCourt(resume = false) {
         },
         said: (t) => {
           if (/これにて閉廷|閉廷します|閉廷！/.test(speakingTurn + t)) adjourn();
-          if (/議論タイム/.test(speakingTurn + t)) phase("debate");
-          if (/証拠品タイム/.test(speakingTurn + t)) phase("evidence");
+          if (/議論タイム|言い返し|反論はある/.test(speakingTurn + t)) phase("debate");
+          if (/証拠品タイム|証拠(品|になる|はある|を見せ)/.test(speakingTurn + t)) phase("evidence");
           if (heardTurn) {
             flyStatement(heardTurn);
             heardTurn = "";
