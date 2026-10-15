@@ -26,7 +26,8 @@ export class Speaker {
   // WAV（判事の声）は丸ごとデコードして鳴らす
   async playWav(b64) {
     // 再生が止められている（スマホで音が許可されていない等）なら、待たずに進む
-    if (this.ctx.state !== "running") await this.ctx.resume().catch(() => {});
+    // 再生の許可を頼むが、ユーザーの操作がないと返ってこないことがあるので0.5秒で見切る
+    if (this.ctx.state !== "running") await Promise.race([this.ctx.resume().catch(() => {}), new Promise((r) => setTimeout(r, 500))]);
     if (this.ctx.state !== "running") return;
     const buf = await this.ctx.decodeAudioData(fromBase64(b64).buffer);
     const src = this.ctx.createBufferSource();

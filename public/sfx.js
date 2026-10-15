@@ -34,7 +34,7 @@ export const sfx = {
   },
   // 開廷のラッパ（ド・ミ・ソ・ド）
   async fanfare(ctx) {
-    if (ctx.state === "suspended") await ctx.resume();
+    if (ctx.state === "suspended") await Promise.race([ctx.resume().catch(() => {}), new Promise((r) => setTimeout(r, 500))]);
     const t = ctx.currentTime + 0.05;
     [523, 659, 784, 1047].forEach((hz, i) => {
       const o = ctx.createOscillator();

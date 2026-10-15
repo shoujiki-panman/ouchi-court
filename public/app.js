@@ -41,7 +41,7 @@ const SOLO = (topic, side, rv) => `あなたは「おうち裁判 ひとりで�
 1. 開廷！ルールを一言で。子どもに名前を聞き「〇〇さんですね？」と確かめる。
 2. お題の説明を2〜3文で（上の説明を使う）。賛成・反対の例を1つずつ言い、「ラウンド1！${side}側の〇〇さん、どう思う？」と聞く。
 3. 各ラウンド: 子どもが意見を言う → 採点の知らせが届いたら1文だけ実況 → すぐコン太として反論を1つ短く → 「ラウンド2！」と次へ。アドバイスや説明は試合中にしない（白熱させる）。
-4. 3ラウンド終わるか「勝負あり」の知らせが来たら、「勝負あり！」と言って call_judge を呼ぶ。
+4. 「試合終了」の知らせが来たときだけ「勝負あり！」と言って call_judge を呼ぶ（自分でラウンドを数えて終わらせない。採点の知らせが来るまで次へ進まない）。
 5. 判決と罰ゲームのあと「これにて閉廷！」。
 守ること: 子どもが話している途中で口をはさまない。子どもを言い負かして終わらせない。考えを言えたことを必ずほめる。日本語で話す。`;
 
@@ -503,7 +503,7 @@ function swayBy(n) {
   balanceVal = Math.max(-100, Math.min(100, balanceVal + n * 12 * (ronpaBoost ? 2 : 1)));
   ronpaBoost = false;
   $("balMark").style.left = `${50 + balanceVal / 2}%`;
-  if (Math.abs(balanceVal) >= 70) comebackTime(balanceVal < 0 ? parties[1] : parties[0]);
+  if (mode !== "solo" && Math.abs(balanceVal) >= 70) comebackTime(balanceVal < 0 ? parties[1] : parties[0]);
 }
 // 逆転チャンス：押されている側が反撃する時間（20秒・点数3倍）
 async function comebackTime(loser) {
@@ -978,8 +978,13 @@ function pickName(text) {
   if (m && parties.length < 2 && !parties.includes(m[1]) && !/^(うん|はい|いいえ|でも|だって)$/.test(m[1])) parties.push(m[1]);
   showParties();
 }
-async function lawyersCheck(statement) {
-  if (!live || judging || lawyerBusy) return;
+let checkQueue = Promise.resolve();
+function lawyersCheck(statement) {
+  // 前の発言を判定しているあいだに来た発言も、順番に判定する（10/16 ラウンド3が数えられなかった）
+  checkQueue = checkQueue.then(() => lawyersCheckNow(statement)).catch(() => {});
+}
+async function lawyersCheckNow(statement) {
+  if (!live || judging) return;
   lawyerBusy = true;
   try {
     const recent = record.slice(-8).map((r) => `${r.who}: ${r.text}`).join("\n");
