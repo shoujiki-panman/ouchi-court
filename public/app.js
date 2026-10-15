@@ -383,6 +383,8 @@ async function openCourt(resume = false) {
           const tail = speakingTurn.slice(-24);
           const named = /ポン子(です|よ！|だよ)|弁護人ポン子/.test(tail) ? "lawyerP" : /コン太(です|だ！|だよ|様)|弁護人コン太/.test(tail) ? "lawyerD" : /タヌ吉(です|だよ)|書記官タヌ吉/.test(tail) ? "bailiff" : null;
           const id = named ?? (speakingTurn.length === t.length ? "bailiff" : who);
+          // 声の高さもキャラごとに変える（音声は文字起こしとほぼ同じ順で届くので、名乗った所から切りかわる）
+          if (speaker) speaker.rate = { lawyerD: 1.13, lawyerP: 1.24 }[id] ?? 1;
           if (who !== id) {
             speakingTurn = t;
             onStage(id, t, { fresh: true });
@@ -396,6 +398,7 @@ async function openCourt(resume = false) {
         },
         turnComplete: () => {
           dbg.tc++;
+          if (speaker) speaker.rate = 1; // 次の番は書記官の声から
           speakingTurn = "";
           if (mode === "solo") $("turnBtn").style.display = "inline-block";
           setTimeout(() => !speaker.busy && beat?.loud(false), 600);

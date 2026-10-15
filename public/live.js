@@ -22,6 +22,8 @@ export class Speaker {
     this.wave = new Uint8Array(this.analyser.fftSize);
     this.next = 0;
     this.playing = new Set();
+    // 声の高さ（コン太・ポン子は速く高くして、書記官と別人に聞こえるようにする 10/16）
+    this.rate = 1;
   }
   // WAV（判事の声）は丸ごとデコードして鳴らす
   async playWav(b64) {
@@ -50,17 +52,19 @@ export class Speaker {
     for (let i = 0; i < pcm.length; i++) ch[i] = pcm[i] / 32768;
     const src = this.ctx.createBufferSource();
     src.buffer = buf;
+    src.playbackRate.value = this.rate;
+    const len = buf.duration / this.rate;
     src.connect(this.analyser);
     const at = Math.max(this.ctx.currentTime + 0.03, this.next);
     src.start(at);
-    this.next = at + buf.duration;
+    this.next = at + len;
     this.playing.add(src);
     src.onended = () => this.playing.delete(src);
     if (this.ctx.state !== "running") return Promise.resolve();
     // 「鳴り終わり」が来ないこともあるので、長さ＋1秒で見切る
     return new Promise((done) => {
       src.addEventListener("ended", done);
-      setTimeout(done, (buf.duration + 1) * 1000);
+      setTimeout(done, (len + 1) * 1000);
     });
   }
   // 観客の声などの短い音（mp3）。一度読んだら覚えておく
