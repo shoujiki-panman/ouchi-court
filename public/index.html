@@ -90,11 +90,16 @@
   .reel.spin .val { animation: spin .12s steps(2) infinite; }
   @keyframes spin { 0% { transform: translateY(-40%); opacity: .3; } 100% { transform: translateY(40%); opacity: .3; } }
   /* ドパガキ要素：ヒートメーター・点数・観客のリアクション・称号 */
-  #heat { position: absolute; left: 12px; right: 12px; top: 10px; height: 14px; background: rgba(255,255,255,.12); border-radius: 8px; overflow: hidden; z-index: 4; }
-  #heatBar { height: 100%; width: 0%; background: linear-gradient(90deg, var(--purple), var(--pink), var(--gold)); transition: width .4s; }
-  #heat.max { box-shadow: 0 0 18px var(--gold); animation: pulse .5s infinite alternate; }
+  /* 天秤ゲージ：どちらの言い分が優勢か */
+  #balance { position: absolute; left: 12px; right: 12px; top: 8px; display: flex; align-items: center; gap: 8px; z-index: 4; }
+  #balance span { font-size: .85rem; padding: 2px 8px; background: rgba(0,0,0,.6); border: 1px solid var(--pink); white-space: nowrap; max-width: 30%; overflow: hidden; text-overflow: ellipsis; }
+  #balD { border-color: #3fa9ff !important; }
+  #balTrack { position: relative; flex: 1; height: 14px; border-radius: 8px; background: linear-gradient(90deg, var(--pink), #2a1838 50%, #3fa9ff); overflow: visible; }
+  #balMark { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); font-size: 1.4rem; transition: left .6s cubic-bezier(.2,1.4,.4,1); filter: drop-shadow(0 0 6px #fff); }
+  #balFill { display: none; }
+  #balance.chance #balTrack { animation: pulse .4s infinite alternate; box-shadow: 0 0 18px var(--gold); }
   @keyframes pulse { to { transform: scale(1.02); } }
-  #score { position: absolute; right: 14px; top: 30px; z-index: 4; font-size: 1.1rem; text-shadow: 2px 2px 0 #000; }
+  #score { position: absolute; right: 14px; top: 40px; z-index: 4; font-size: 1.1rem; text-shadow: 2px 2px 0 #000; }
   #combo { color: var(--gold); }
   .pop { position: absolute; z-index: 6; font-size: 1.6rem; color: var(--gold); text-shadow: 2px 2px 0 #000; animation: pop 1.2s forwards; pointer-events: none; }
   @keyframes pop { 0% { transform: scale(.4); opacity: 0; } 20% { transform: scale(1.3); opacity: 1; } 100% { transform: translateY(-80px) scale(1); opacity: 0; } }
@@ -107,7 +112,7 @@
   #stage.fever #bg { filter: brightness(.8) saturate(2) hue-rotate(-30deg); animation: sweep 3s ease-in-out infinite alternate; }
   #stage.fever { box-shadow: 0 0 0 4px var(--pink), 0 0 40px var(--pink); animation: feverPulse .45s infinite alternate; }
   @keyframes feverPulse { to { box-shadow: 0 0 0 4px var(--gold), 0 0 60px var(--gold); } }
-  #feverClock { position: absolute; left: 14px; top: 30px; z-index: 4; font-size: 1.3rem; color: var(--gold); text-shadow: 2px 2px 0 #000; }
+  #feverClock { position: absolute; left: 14px; top: 40px; z-index: 4; font-size: 1.3rem; color: var(--gold); text-shadow: 2px 2px 0 #000; }
   /* いまの状況（段取りの進み具合） */
   #steps { display: flex; gap: 4px; flex-wrap: wrap; margin: 6px 0; }
   #steps span { font-size: .78rem; padding: 4px 10px; background: #1d1028; color: var(--muted); transform: skewX(-10deg); }
@@ -153,6 +158,9 @@
   #stamp.on { animation: stamp .45s forwards; }
   @keyframes stamp { to { transform: translate(-50%,-50%) scale(1) rotate(-8deg); opacity: 1; } }
 
+  #names input { font: inherit; padding: 10px 12px; border: 2px solid var(--pink); background: #160a22; color: #fff; width: 13em; transform: skewX(-8deg); }
+  #names #nameD { border-color: #3fa9ff; }
+  #names span { font-size: 1.2rem; color: var(--gold); }
   .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   button { font: inherit; padding: 13px 22px; border: 0; cursor: pointer; color: #fff; background: var(--pink); transform: skewX(-10deg); box-shadow: 4px 4px 0 #000; }
   button > span { display: inline-block; transform: skewX(10deg); }
@@ -182,7 +190,7 @@
   <div id="steps"></div>
   <div id="stage">
     <div id="bg"></div>
-    <div id="heat"><div id="heatBar"></div></div>
+    <div id="balance"><span id="balP">原告</span><div id="balTrack"><div id="balFill"></div><div id="balMark">⚖️</div></div><span id="balD">被告</span></div>
     <div id="feverClock" class="display"></div>
     <div id="score" class="display">論破 <span id="pts">0</span>pt <span id="combo"></span></div>
     <div id="title"><div><div style="color:var(--muted)">本日の称号</div><div class="badge display" id="badge">論破王</div></div></div>
@@ -199,6 +207,11 @@
     <div id="flash"></div>
   </div>
 
+  <div id="names" class="controls">
+    <input id="nameP" placeholder="訴える人（原告）の名前" maxlength="12">
+    <span>VS</span>
+    <input id="nameD" placeholder="訴えられた人（被告）の名前" maxlength="12">
+  </div>
   <div class="controls">
     <button id="open" class="big display"><span>開廷する</span></button>
     <button id="ronpa" class="display" disabled><span>論破！</span></button>

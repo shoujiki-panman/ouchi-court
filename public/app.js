@@ -168,6 +168,7 @@ async function ronpa(statement = lastStatement, el) {
   if (!live || !statement) return;
   el?.classList.add("hit");
   ronpaCount++;
+  ronpaBoost = true;
   heat(25);
   score(100, "論破");
   react("ronpa");
@@ -221,7 +222,21 @@ async function openCourt(resume = false) {
     paused = false;
     $("paused").classList.remove("on");
   }
-  if (!resume) parties.length = 0;
+  if (!resume) {
+    parties.length = 0;
+    const p = $("nameP").value.trim(), d = $("nameD").value.trim();
+    if (!p || !d) {
+      status("先に、訴える人（原告）と訴えられた人（被告）の名前を入れてください。");
+      $(p ? "nameD" : "nameP").focus();
+      return;
+    }
+    parties.push(p, d);
+    localStorage.setItem("ouchi-court-names", JSON.stringify([p, d]));
+    $("balP").textContent = `${p}（原告）`;
+    $("balD").textContent = `${d}（被告）`;
+    balanceVal = 0;
+    $("balMark").style.left = "50%";
+  }
   if (!resume) shownPhase = "";
   $("resume").style.display = "none";
   if (resume) {
@@ -252,7 +267,7 @@ async function openCourt(resume = false) {
       model,
       setup: {
         generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Puck" } } } },
-        systemInstruction: { parts: [{ text: BAILIFF }] },
+        systemInstruction: { parts: [{ text: `${BAILIFF}\n今日の原告は「${parties[0]}」、被告は「${parties[1]}」。音声の聞き取りで名前がちがって聞こえても、必ずこの2人のどちらかとして扱い、ほかの名前を作らない。開廷したら「${parties[0]}さん」と名前を呼んで訴えを聞く。` }] },
         tools: [{ functionDeclarations: [CALL_JUDGE, INVESTIGATE] }],
         inputAudioTranscription: {},
         outputAudioTranscription: {},
@@ -356,8 +371,9 @@ async function judge(call) {
   beat?.stop();
   const drum = sfx.drumroll(speaker.ctx, 12);
   try {
-    const names = [call.args?.plaintiff, call.args?.defendant].filter(Boolean);
-    const text = `${call.args?.summary ?? ""}\n\n${record.map((r) => `${r.who}: ${r.text}`).join("\n")}`.slice(-6000);
+    const names = parties.length === 2 ? [...parties] : [call.args?.plaintiff, call.args?.defendant].filter(Boolean);
+    const lean = balanceVal < -20 ? `${parties[0]}さん寄り` : balanceVal > 20 ? `${parties[1]}さん寄り` : "五分五分";
+    const text = `原告: ${parties[0]} / 被告: ${parties[1]} / 法廷の天秤: ${lean}（${balanceVal}）\n${call.args?.summary ?? ""}\n\n${record.map((r) => `${r.who}: ${r.text}`).join("\n")}`.slice(-6000);
     const v = await api("/api/verdict", { record: text, names, evidence: evidence.map((e) => e.label) });
     await voteTime(v.panel ?? []);
     const voice = await api("/api/voice", { text: v.speech }).catch(() => null);
@@ -392,41 +408,47 @@ async function judge(call) {
 // ドパガキ要素：ずっと鳴るビート・ヒートメーター・論破の点数とコンボ・観客のリアクション・最後の称号
 let beat, heatVal = 0, points = 0, combo = 0, comboTimer, ronpaCount = 0, objectionCount = 0, evidenceCount = 0;
 let fever = false;
+// 盛り上がり（heat）はビートの速さだけに使う。画面のゲージは天秤（どちらが優勢か）に置きかえた（10/16「何でも増えればいいんだっけ？」）
 function heat(add) {
-  if (fever && add > 0) return;
   heatVal = Math.max(0, Math.min(100, heatVal + add));
-  $("heatBar").style.width = `${heatVal}%`;
-  $("heat").classList.toggle("max", heatVal >= 100);
   beat?.faster(92 + heatVal * 0.7);
-  if (heatVal >= 100 && add > 0) feverTime();
 }
 
-// ゲージが満タン：FEVER（20秒・点数3倍・法廷が赤く光る・書記官も煽る）。終わったらゲージは3割に戻る
-async function feverTime() {
+// 天秤ゲージ：マイナスは原告側、プラスは被告側が優勢。発言のたびに AI が「どちらを強くしたか」を判定して動かす
+let balanceVal = 0, ronpaBoost = false;
+function swayBy(n) {
+  if (!n) return;
+  balanceVal = Math.max(-100, Math.min(100, balanceVal + n * 12 * (ronpaBoost ? 2 : 1)));
+  ronpaBoost = false;
+  $("balMark").style.left = `${50 + balanceVal / 2}%`;
+  if (Math.abs(balanceVal) >= 70) comebackTime(balanceVal < 0 ? parties[1] : parties[0]);
+}
+// 逆転チャンス：押されている側が反撃する時間（20秒・点数3倍）
+async function comebackTime(loser) {
   if (fever) return;
   fever = true;
+  $("balance").classList.add("chance");
   $("stage").classList.add("fever");
-  shout("FEVER！🔥");
-  speaker?.clip("crowd/oo.mp3", 0.6);
+  shout("逆転チャンス！");
+  speaker?.clip("crowd/ganbare.mp3", 0.6);
   react("ronpa");
   beat?.faster(170);
-  live?.send({ clientContent: { turns: [{ role: "user", parts: [{ text: "（法廷が白熱してFEVERタイムになりました！20秒間、テンション最高で「議論が白熱してきたぞー！」と煽り、二人に本音を一言ずつぶつけさせてください。論破や異議は今なら点数3倍です）" }] }], turnComplete: true } });
+  live?.send({ clientContent: { turns: [{ role: "user", parts: [{ text: `（天秤が大きくかたむきました。押されているのは${loser}さん。「逆転チャンス！」と盛り上げ、${loser}さんに「異議あり」か証拠品で反撃するよう、名前を呼んでうながしてください。今なら点数3倍です）` }] }], turnComplete: true } });
   let left = 20;
-  $("feverClock").textContent = `FEVER ${left}`;
   await new Promise((done) => {
     const t = setInterval(() => {
-      left--;
-      $("feverClock").textContent = left > 0 ? `FEVER ${left}` : "";
-      if (left <= 0) {
+      $("feverClock").textContent = left > 0 ? `逆転チャンス ${left}` : "";
+      if (--left < 0) {
         clearInterval(t);
         done();
       }
     }, 1000);
   });
   fever = false;
+  $("balance").classList.remove("chance");
   $("stage").classList.remove("fever");
-  heatVal = 30;
-  heat(0);
+  balanceVal = Math.sign(balanceVal) * 40;
+  $("balMark").style.left = `${50 + balanceVal / 2}%`;
 }
 function bigScore(title, plus, total) {
   const el = document.createElement("div");
@@ -671,9 +693,10 @@ function showEvidence(card) {
 
 // 弁護人が自分から割り込む：子どもの発言のたびに、2人の弁護人（別々の AI）が「異議あり」をするか決める
 let lastObjector = "", lawyerBusy = false;
-// 原告・被告の名前：最初の2つの子どもの発言の「〇〇です」「ぼくは〇〇」から拾う
+// 原告・被告の名前：開廷の前に入れてもらう（音声の聞き違えで「カントウさん」になった 10/16）。入っていなければ最初の発言から拾う
 const parties = [];
 function pickName(text) {
+  if (parties.length >= 2) return;
   const m = text.match(/(?:わたしは|私は|ぼくは|僕は|おれは|俺は)?\s*([ァ-ヶーぁ-ん一-龠A-Za-z]{1,8}?)(?:です|だよ|。|、|！)/);
   if (m && parties.length < 2 && !parties.includes(m[1]) && !/^(うん|はい|いいえ|でも|だって)$/.test(m[1])) parties.push(m[1]);
 }
@@ -683,7 +706,9 @@ async function lawyersCheck(statement) {
   try {
     const recent = record.slice(-8).map((r) => `${r.who}: ${r.text}`).join("\n");
     const r = await api("/api/lawyers", { record: recent, last: statement, plaintiff: parties[0], defendant: parties[1] });
+    swayBy(r.sway ?? 0);
     if (r.id && r.id !== lastObjector) {
+      swayBy(r.defends === "plaintiff" ? -1 : 1); // 異議で、責められた側に少し戻す
       lastObjector = r.id;
       onStage(r.id, r.line, { fresh: true });
       objectionCount++;
@@ -780,3 +805,10 @@ if (new URLSearchParams(location.search).has("debug")) {
     ronpa: () => ronpa(),
   };
 }
+
+// 前回の名前を入れておく
+try {
+  const [p, d] = JSON.parse(localStorage.getItem("ouchi-court-names") ?? "[]");
+  if (p) $("nameP").value = p;
+  if (d) $("nameD").value = d;
+} catch {}

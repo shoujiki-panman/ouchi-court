@@ -172,13 +172,15 @@ async function lawyers(env, { record, last, plaintiff, defendant }) {
       "@cf/mistralai/mistral-small-3.1-24b-instruct",
       `家庭の法廷。原告=${p}、被告=${d}。いちばん新しい発言が、どちらかを悪い・ずるい・わざと・勝手に などと責めたり決めつけたりしているかを判定する。` +
         `責められている人が${p}なら "plaintiff"、${d}なら "defendant"、だれも責めていない・ふつうの説明なら "none"。` +
-        "line は、責められた側の弁護人が言う「異議あり！」から始まる40字以内のひとこと（責められた人をかばう内容）。" +
-        '出力は JSON だけ: {"target": "plaintiff | defendant | none", "line": "..."}',
+        `lean は、この発言がどちらの言い分を強くするか（筋の通った理由・事実・相手の矛盾をついた なら強くなる。ただの悪口や決めつけは強くならない）: "plaintiff" / "defendant" / "none"。strength は 1〜3。` +
+        '出力は JSON だけ: {"target": "plaintiff | defendant | none", "lean": "plaintiff | defendant | none", "strength": 1}',
       `これまで:\n${record}\n\nいちばん新しい発言: ${last}`,
     ),
     6000,
   ).catch(() => ({ target: "none" }));
-  if (v?.target !== "plaintiff" && v?.target !== "defendant") return { id: null };
+  // 天秤：この発言がどちらを強くしたか（-3〜3。マイナスは原告側）
+  const sway = v?.lean === "plaintiff" ? -Math.min(3, Number(v.strength) || 1) : v?.lean === "defendant" ? Math.min(3, Number(v.strength) || 1) : 0;
+  if (v?.target !== "plaintiff" && v?.target !== "defendant") return { id: null, sway };
   const l = LAWYERS.find((x) => x.side === (v.target === "plaintiff" ? "原告" : "被告"));
   const client = v.target === "plaintiff" ? p : d;
   // 出る弁護人が決まってから、その弁護人として依頼人をかばう一言を作る
@@ -195,7 +197,7 @@ async function lawyers(env, { record, last, plaintiff, defendant }) {
   ).catch(() => null);
   let line = String(w?.line ?? `異議あり！${client}さんのことを決めつけないでください！`).slice(0, 60);
   if (!line.startsWith("異議あり")) line = `異議あり！${line}`;
-  return { id: l.id, name: l.name, line };
+  return { id: l.id, name: l.name, line, sway, defends: v.target };
 }
 
 // 調査官ホー：「調べる」は Wikipedia（鍵いらず）を引いて子ども向けにまとめる。「再現」は状況の絵を描く（Workers AI の画像モデル）
