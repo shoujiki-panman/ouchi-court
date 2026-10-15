@@ -36,11 +36,11 @@ const SOLO = (topic, side, rv) => `あなたは「おうち裁判 ひとりで�
 説明: ${topic.detail ?? topic.background}
 賛成の例: ${topic.pro ?? "（自分で考えて）"}
 反対の例: ${topic.con ?? "（自分で考えて）"}
-子どもは「${side}」側。弁護人ポン子は子どもの味方でコーチ。弁護人コン太は反対側のライバル。どちらもあなたが声色を変えて演じ、名乗ってから話す。
+子どもは「${side}」側。弁護人ポン子は子どもの味方（試合中は応援の一言だけ。アドバイスは試合のあとに画面で出す）。弁護人コン太は反対側のライバル。どちらもあなたが声色を変えて演じ、名乗ってから話す。
 段取り:
 1. 開廷！ルールを一言で。子どもに名前を聞き「〇〇さんですね？」と確かめる。
 2. お題の説明を2〜3文で（上の説明を使う）。賛成・反対の例を1つずつ言い、「ラウンド1！${side}側の〇〇さん、どう思う？」と聞く。
-3. 各ラウンド: 子どもが意見を言う → 採点の知らせが届いたら短く実況 → ポン子のヒントの知らせが届いたら、ポン子として一言で伝える → コン太として反論を1つ短く → 「ラウンド2！」と次へ。
+3. 各ラウンド: 子どもが意見を言う → 採点の知らせが届いたら1文だけ実況 → すぐコン太として反論を1つ短く → 「ラウンド2！」と次へ。アドバイスや説明は試合中にしない（白熱させる）。
 4. 3ラウンド終わるか「勝負あり」の知らせが来たら、「勝負あり！」と言って call_judge を呼ぶ。
 5. 判決と罰ゲームのあと「これにて閉廷！」。
 守ること: 子どもが話している途中で口をはさまない。子どもを言い負かして終わらせない。考えを言えたことを必ずほめる。日本語で話す。`;
@@ -263,7 +263,7 @@ async function openCourt(resume = false) {
     arguing = false;
     rounds = 0;
     best = { text: "", strength: -1 };
-    lastHint = "";
+    hints = [];
     clearInterval(soloClock);
     $("result").classList.remove("on");
     STEPS = mode === "solo" ? SOLO_STEPS : VERSUS_STEPS;
@@ -722,7 +722,7 @@ function endTurn() {
 
 // ひとりで挑戦の勝ち負け：議論タイムの発言ごとに判事が採点し、先に3ポイントで勝ち
 let soloScore = { player: 0, rival: 0 };
-let arguing = false, rounds = 0, best = { text: "", strength: -1 }, lastHint = "", soloClock, soloLeft = 180;
+let arguing = false, rounds = 0, best = { text: "", strength: -1 }, hints = [], soloClock, soloLeft = 180;
 let rivalInfo = { level: 1, wins: 0, losses: 0, draws: 0 };
 function showSoloScore() {
   $("soloScore").innerHTML = `<span class="me">あなた ${soloScore.player}</span><span class="vs">-</span><span class="rival">${soloScore.rival} コン太</span><small>ラウンド ${Math.min(rounds + 1, 3)}/3｜コン太 Lv${rivalInfo.level}</small>`;
@@ -732,10 +732,7 @@ async function soloPoint(point, why, hint, statement, strength) {
   soloScore[point]++;
   rounds++;
   if (strength > best.strength) best = { text: statement, strength };
-  if (hint) {
-    lastHint = hint;
-    coach(hint);
-  }
+  if (hint) hints.push(hint);
   step(rounds < 3 ? `r${rounds + 1}` : "verdict");
   showSoloScore();
   const mine = point === "player";
@@ -744,7 +741,7 @@ async function soloPoint(point, why, hint, statement, strength) {
   speaker?.clip(mine ? "crowd/oo.mp3" : "crowd/ee.mp3", 0.5);
   if (mine) score(100, "主張");
   const done = rounds >= 3 || soloScore.player >= 2 || soloScore.rival >= 2 && rounds >= 3;
-  live?.send({ clientContent: { turns: [{ role: "user", parts: [{ text: `（ラウンド${rounds}の採点: ${mine ? "子ども" : "コン太"}に1ポイント。理由「${why}」。いま あなた${soloScore.player} - ${soloScore.rival}コン太。${hint ? `ポン子のヒント:「${hint}」をポン子として一言で。` : ""}${rounds >= 3 ? "3ラウンド終了！「勝負あり！」と言って、すぐ call_judge を呼んでください。" : `短く実況して、コン太の反論 → 「ラウンド${rounds + 1}！」へ。`}）` }] }], turnComplete: true } });
+  live?.send({ clientContent: { turns: [{ role: "user", parts: [{ text: `（ラウンド${rounds}の採点: ${mine ? "子ども" : "コン太"}に1ポイント。理由「${why}」。いま あなた${soloScore.player} - ${soloScore.rival}コン太。${rounds >= 3 ? "3ラウンド終了！「勝負あり！」と言って、すぐ call_judge を呼んでください。" : `実況は1文だけで、すぐコン太の反論 → 「ラウンド${rounds + 1}！」へ。テンポよく、白熱させて。`}）` }] }], turnComplete: true } });
 }
 // 3分の持ち時間（議論が始まってから）。切れたら勝負あり
 function startSoloClock() {
@@ -816,7 +813,7 @@ async function resultCard(result, v) {
     <div class="rs display">あなた ${soloScore.player} - ${soloScore.rival} コン太</div>
     <div class="rq">お題：${topic?.motion ?? ""}（あなたは${side}）</div>
     <div class="rb"><b>きょうの名言</b>「${best.text || "（また次回！）"}」</div>
-    <div class="rc"><img src="img/lawyerP.png" alt=""><span><b>コーチ ポン子</b>${lastHint || "考えを自分の言葉で言えたのがすごい！"}</span></div>
+    <div class="rc"><img src="img/lawyerP.png" alt=""><span><b>ポン子の作戦メモ（次はこうすると強いよ）</b>${hints.length ? hints.slice(-2).map((h) => `・${h}`).join("<br>") : "考えを自分の言葉で言えたのがすごい！"}</span></div>
     <div class="rc"><img src="img/lawyerD.png" alt=""><span><b>ライバル コン太</b>${rivalLine}</span></div>
     <div class="rp display">論破力 ${points}pt｜通算 ${rv.wins ?? 0}勝 ${rv.losses ?? 0}敗</div>
     <button id="resultClose"><span>とじる</span></button></div>`;
