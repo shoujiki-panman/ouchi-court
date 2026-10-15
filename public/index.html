@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>おうち裁判</title>
+<style>
+  :root { --bg: #f7f3ec; --card: #fffdf8; --ink: #2b2620; --muted: #7a6f62; --line: #e4dccf; --accent: #8a5a2b; --judge: #3d2b1f; --child: #e9f1fb; --bailiff: #fff4e2; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #1d1a16; --card: #27231e; --ink: #f1ebe2; --muted: #b4a898; --line: #3a342c; --accent: #e0a96d; --judge: #f1ebe2; --child: #22303f; --bailiff: #3a2f22; } }
+  :root[data-theme="dark"] { --bg: #1d1a16; --card: #27231e; --ink: #f1ebe2; --muted: #b4a898; --line: #3a342c; --accent: #e0a96d; --judge: #f1ebe2; --child: #22303f; --bailiff: #3a2f22; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: system-ui, -apple-system, "Hiragino Sans", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 1.6rem; margin: 8px 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 16px; }
+  .bench { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px; }
+  .cast { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 6px; text-align: center; font-size: .85rem; transition: transform .15s, border-color .15s; }
+  .cast .face { font-size: 2rem; display: block; }
+  .cast.on { border-color: var(--accent); transform: translateY(-3px); box-shadow: 0 3px 0 var(--accent); }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  button { font: inherit; padding: 12px 20px; border-radius: 999px; border: 0; background: var(--accent); color: #fff; cursor: pointer; }
+  button:disabled { opacity: .4; cursor: default; }
+  button.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+  input { font: inherit; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--ink); width: 9em; }
+  #status { color: var(--muted); margin: 4px 0 12px; min-height: 1.4em; }
+  #log { display: flex; flex-direction: column; gap: 8px; }
+  .bubble { padding: 10px 12px; border-radius: 12px; line-height: 1.6; max-width: 92%; }
+  .bubble b { display: block; font-size: .75rem; color: var(--muted); font-weight: 600; }
+  .child { background: var(--child); align-self: flex-end; }
+  .bailiff { background: var(--bailiff); }
+  .judge { background: var(--card); border: 2px solid var(--judge); font-weight: 600; }
+  footer { color: var(--muted); font-size: .8rem; margin-top: 24px; }
+  @media (max-width: 480px) { .bench { grid-template-columns: repeat(2, 1fr); } }
+</style>
+</head>
+<body>
+<main>
+  <h1>⚖️ おうち裁判</h1>
+  <p class="sub">けんかしたら、開廷。タヌキ判事が、ちゃんと聞いて、笑える判決を出します。</p>
+  <div class="bench">
+    <div class="cast" id="judge"><span class="face">🦝</span>タヌキ判事</div>
+    <div class="cast" id="bailiff"><span class="face">📜</span>書記官タヌ吉</div>
+    <div class="cast" id="lawyerP"><span class="face">🐼</span>弁護人ポン子</div>
+    <div class="cast" id="lawyerD"><span class="face">🦊</span>弁護人コン太</div>
+  </div>
+  <div class="controls">
+    <button id="open">開廷する</button>
+    <button id="close" class="ghost" disabled>閉廷</button>
+    <input id="pass" type="password" placeholder="家族の合言葉" autocomplete="current-password">
+  </div>
+  <div id="status">合言葉を入れて「開廷する」を押してください。マイクを使います。</div>
+  <div id="log"></div>
+  <footer>これは Alexa+ で「アレクサ、裁判して」と言ったときの体験を、ブラウザで再現したものです。判例はおうちの中だけに保存されます（名前・争点・判決の要約のみ）。</footer>
+</main>
+<script type="module" src="app.js"></script>
+</body>
+</html>

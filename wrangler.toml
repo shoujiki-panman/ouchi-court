@@ -1,0 +1,20 @@
+name = "ouchi-court"
+main = "src/worker.js"
+compatibility_date = "2026-09-01"
+
+[vars]
+# リアルタイムで聞いて進行する係（書記官・弁護人）と、判決を考える判事、判事の声
+LIVE_MODEL = "gemini-3.8-live"
+JUDGE_MODEL = "gemini-3.8-flash"
+JUDGE_TTS_MODEL = "gemini-3.8-flash-lite-tts"
+OYASUMI_MCP_URL = "https://oyasumi-mcp.panman.workers.dev/internal-mcp"
+
+# 判例集はおやすみ MCP（同じアカウントの Worker なので Service Binding で呼ぶ）
+[[services]]
+binding = "OYASUMI"
+service = "oyasumi-mcp"
+
+# 法廷の画面（ブラウザ）
+[assets]
+directory = "public"
+binding = "ASSETS"
