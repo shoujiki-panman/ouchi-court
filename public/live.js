@@ -53,7 +53,11 @@ export class Speaker {
     this.playing.add(src);
     src.onended = () => this.playing.delete(src);
     if (this.ctx.state !== "running") return Promise.resolve();
-    return new Promise((done) => src.addEventListener("ended", done));
+    // 「鳴り終わり」が来ないこともあるので、長さ＋1秒で見切る
+    return new Promise((done) => {
+      src.addEventListener("ended", done);
+      setTimeout(done, (buf.duration + 1) * 1000);
+    });
   }
   // 観客の声などの短い音（mp3）。一度読んだら覚えておく
   async clip(url, volume = 0.4) {
