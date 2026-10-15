@@ -74,8 +74,9 @@ export class Speaker {
     this.playing.clear();
     this.next = 0;
   }
+  // 鳴らしている途中か（音が止まっている＝ブラウザが再生を許していないときは、鳴っていないとみなす）
   get busy() {
-    return this.ctx.currentTime < this.next;
+    return this.ctx.state === "running" && this.ctx.currentTime < this.next;
   }
 }
 
@@ -85,7 +86,13 @@ export async function startMic(onChunk) {
   const ctx = new AudioContext({ sampleRate: 16000 });
   await ctx.audioWorklet.addModule("capture-worklet.js");
   const node = new AudioWorkletNode(ctx, "capture");
-  node.port.onmessage = (e) => onChunk(toBase64(new Uint8Array(e.data)));
+  node.port.onmessage = (e) => {
+    // 声の大きさ（0〜1）も一緒に渡す（ひとりで挑戦の「黙ったら番を終える」に使う）
+    const pcm = new Int16Array(e.data);
+    let sum = 0;
+    for (let i = 0; i < pcm.length; i += 4) sum += (pcm[i] / 32768) ** 2;
+    onChunk(toBase64(new Uint8Array(e.data)), Math.min(1, Math.sqrt(sum / (pcm.length / 4)) * 6));
+  };
   ctx.createMediaStreamSource(stream).connect(node);
   return () => {
     stream.getTracks().forEach((t) => t.stop());

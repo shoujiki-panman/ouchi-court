@@ -245,20 +245,36 @@ async function investigate(env, { query, mode }) {
 
 // ひとりで挑戦モードのお題：Wikipedia「最近の出来事」から、子どもが議論できる話題だけを選んで「〇〇に賛成？反対？」にする
 const EVERGREEN = [
-  { motion: "宿題は、なくしたほうがいい？", background: "毎日の宿題、あったほうがいい？ないほうがいい？", source: null },
-  { motion: "給食に、毎日デザートを出すべき？", background: "デザートが毎日あったらうれしいけど…？", source: null },
-  { motion: "小学生もスマホを持っていい？", background: "連絡に便利。でも使いすぎも心配。", source: null },
+  { motion: "宿題は、なくしたほうがいい？", background: "毎日の宿題、あったほうがいい？ないほうがいい？", detail: "学校では毎日のように宿題が出るよね。家で復習できる一方で、遊ぶ時間や家族との時間が減るという声もあるよ。", pro: "遊びや好きなことに使える時間が増える", con: "家で練習しないと、習ったことを忘れちゃう", source: null },
+  { motion: "給食に、毎日デザートを出すべき？", background: "デザートが毎日あったらうれしいけど…？", detail: "給食のデザートは、今はときどき出る特別なもの。毎日出たらうれしいけど、栄養やお金のことを考える大人もいるよ。", pro: "毎日の楽しみができて、給食がもっと好きになる", con: "あまいものが多いと体によくないし、特別感がなくなる", source: null },
+  { motion: "小学生もスマホを持っていい？", background: "連絡に便利。でも使いすぎも心配。", detail: "スマホを持つ小学生が増えているよ。家族とすぐ連絡できて安心な反面、ゲームや動画で使いすぎる心配もあるんだ。", pro: "何かあったときにすぐ家族に連絡できる", con: "ゲームや動画ばかりになって、勉強や睡眠がへる", source: null },
 ];
+// 子どもに出さない話題（AI の判断だけに任せない。10/16 トラに襲われて亡くなったニュースがお題になった）
+const UNSAFE = /死|亡くな|殺|遺体|事故|事件|逮捕|容疑|襲|負傷|けが|怪我|災害|地震|津波|火災|火事|台風|大雨|訴|裁判|判決|戦争|攻撃|爆|テロ|銃|自殺|いじめ|虐待|結婚|熱愛|交際|不倫|離婚|破局|妊娠|選挙|首相|大臣|議員|株|円安|物価|ギャンブル|酒|たばこ|薬物/;
 async function topics(env) {
   let items = [];
+  let src = { title: "Googleトレンド（いま話題）", url: "https://trends.google.co.jp/trending?geo=JP" };
+  // いま話題：Google トレンドの「急上昇」（公開の RSS・鍵いらず・数時間ごとに更新）。Wikipedia は遅れる（10/16「最近の話題についてこれない」）
   try {
+    const rss = await (await fetch("https://trends.google.co.jp/trending/rss?geo=JP", { headers: { "user-agent": "Mozilla/5.0 (ouchi-court)" } })).text();
+    items = [...rss.matchAll(/<item>([\s\S]*?)<\/item>/g)]
+      .map((m) => {
+        const t = m[1].match(/<title>([\s\S]*?)<\/title>/)?.[1] ?? "";
+        const n = m[1].match(/<ht:news_item_title>([\s\S]*?)<\/ht:news_item_title>/)?.[1] ?? "";
+        return `${t}：${n}`.replace(/&amp;/g, "&").replace(/&#39;/g, "'").replace(/&quot;/g, '"');
+      })
+      .filter((t) => !UNSAFE.test(t))
+      .slice(0, 25);
+  } catch {}
+  if (!items.length) try {
+    src = { title: "Wikipedia「最近の出来事」", url: "https://ja.wikipedia.org/wiki/Portal:最近の出来事" };
     const r = await fetch("https://ja.wikipedia.org/w/api.php?action=parse&page=Portal:%E6%9C%80%E8%BF%91%E3%81%AE%E5%87%BA%E6%9D%A5%E4%BA%8B&prop=text&format=json&formatversion=2", {
       headers: { "user-agent": "ouchi-court/0.1 (family mock trial; https://ouchi-court.panman.workers.dev)" },
     });
     const html = (await r.json()).parse?.text ?? "";
     items = [...html.matchAll(/<li>([\s\S]*?)<\/li>/g)]
       .map((m) => m[1].replace(/<[^>]+>/g, "").replace(/&#?\w+;/g, " ").trim())
-      .filter((t) => t.length > 20)
+      .filter((t) => t.length > 20 && !UNSAFE.test(t))
       .slice(0, 25);
   } catch {}
   let picked = [];
@@ -267,17 +283,17 @@ async function topics(env) {
       ask(
         env,
         "@cf/mistralai/mistral-small-3.1-24b-instruct",
-        "最近のニュースの一覧から、小学生が賛成・反対で楽しく議論できる話題を3つ選ぶ。人が亡くなった・けがをした・災害・事件・戦争・政治家の争い・お金のもうけ話は選ばない（スポーツ・文化・科学・発明・動物・記録などがよい）。" +
+        "いま話題のキーワードとニュースの一覧から、小学生が賛成・反対で楽しく議論できる話題を3つ選ぶ。人が亡くなった・けがをした・災害・事件・裁判・戦争・政治家の争い・芸能人の恋愛や結婚・お金のもうけ話は選ばない（スポーツ・ゲーム・食べ物・動物・科学・発明・記録・季節の行事などがよい）。" +
           "それぞれを、そのニュースから広げた「意見が分かれる」お題にする。ニュースの事実をそのまま聞くのではなく、子どもが自分の考えで賛成・反対を言えるもの。" +
           "例: 女性が初めて棋士になった → 「スポーツやゲームは、男女いっしょの大会にするべき？」／ノーベル賞の研究 → 「すぐ役に立たない研究にも、お金を使うべき？」。" +
-          "background はニュースを10歳にも分かる言葉で一言（〜だよ。の口調）。" +
-          '出力は JSON だけ: {"topics": [{"motion": "お題（25字以内）", "background": "一言の背景（40字以内）", "news": "元のニュースを短く"}]}',
+          "background はニュースを10歳にも分かる言葉で一言（〜だよ。の口調）。detail は、何があったか・なぜ話題か を10歳に分かる言葉で2〜3文（ニュースに書いていない事実を付け足さない。分からない所は「〜らしい」「〜と話題」にとどめる）。pro と con は、賛成派・反対派がよく言いそうな理由を1つずつ（子どもの言葉で）。" +
+          '出力は JSON だけ: {"topics": [{"motion": "お題（25字以内）", "background": "一言の背景（40字以内）", "detail": "2〜3文の説明", "pro": "賛成の理由の例", "con": "反対の理由の例", "news": "元のニュースを短く"}]}',
         items.join("\n"),
-        500,
+        1400,
       ),
-      9000,
+      20000,
     ).catch(() => null);
-    picked = (v?.topics ?? []).slice(0, 3).map((t) => ({ motion: t.motion, background: t.background, source: { title: "Wikipedia「最近の出来事」", url: "https://ja.wikipedia.org/wiki/Portal:最近の出来事", news: t.news } }));
+    picked = (v?.topics ?? []).filter((t) => t?.motion && !UNSAFE.test(`${t.motion}${t.detail}${t.news}${t.background}`)).slice(0, 3).map((t) => ({ motion: t.motion, background: t.background, detail: t.detail, pro: t.pro, con: t.con, source: { ...src, news: t.news } }));
   }
   return { topics: [...picked, ...EVERGREEN].slice(0, 5) };
 }
@@ -289,8 +305,8 @@ async function opponent(env, { topic, side, record, last }) {
       env,
       "@cf/meta/llama-4-scout-17b-16e-instruct",
       `お題「${topic}」で、子どもは「${side}」側。あなたは反対側の弁護人コン太。子どもの最新の発言に、理由がない・決めつけ・前と食い違う などの弱い所があれば「異議あり！」で短く反論する。よい理由が言えていたら割り込まない。` +
-        `strength は子どもの発言の説得力（0=理由なし〜3=とても説得力がある）。` +
-        '出力は JSON だけ: {"object": true か false, "line": "異議あり！から始まる40字以内", "strength": 0}',
+        `strength は子どもの発言の説得力（0=理由なし〜3=とても説得力がある。理由が1つでもちゃんと言えていれば2）。reason は判定の一言（子ども向けに20字以内）。` +
+        '出力は JSON だけ: {"object": true か false, "line": "異議あり！から始まる40字以内", "strength": 0, "reason": "..."}',
       `これまで:\n${record}\n\n子どもの最新の発言: ${last}`,
     ),
     6000,
@@ -298,9 +314,11 @@ async function opponent(env, { topic, side, record, last }) {
   const strength = Math.max(0, Math.min(3, Number(v?.strength) || 0));
   // 天秤：説得力があればプレイヤー側（マイナス）、なければ相手側に少し
   const sway = strength >= 2 ? -strength : 1;
-  if (!v?.object || !v?.line) return { id: null, sway };
+  const point = strength >= 2 ? "player" : "rival";
+  const why = String(v?.reason ?? (point === "player" ? "理由がしっかりしてる！" : "理由がもう少しほしい")).slice(0, 30);
+  if (!v?.object || !v?.line) return { id: null, sway, point, why };
   const line = String(v.line).startsWith("異議あり") ? String(v.line) : `異議あり！${v.line}`;
-  return { id: "lawyerD", name: "弁護人コン太", line: line.slice(0, 60), sway };
+  return { id: "lawyerD", name: "弁護人コン太", line: line.slice(0, 60), sway, point, why };
 }
 
 // 判事の声（24kHz の PCM を base64 で返す）

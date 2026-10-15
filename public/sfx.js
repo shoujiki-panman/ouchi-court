@@ -81,7 +81,8 @@ export const sfx = {
   beat(ctx) {
     // 音量のつまみを1つ通す。人が話す番は小さくする（マイクが拾うと、AI が「まだ話している」と思って返事をしなくなる 10/15）
     const master = ctx.createGain();
-    master.gain.value = 0.15;
+    let lvl = 0; // 最初は無音。盛り上がったら上げる
+    master.gain.value = 0;
     master.connect(ctx.destination);
     let bpm = 92, on = true, n = 0;
     const loop = () => {
@@ -105,7 +106,11 @@ export const sfx = {
     return {
       stop: () => (on = false),
       faster: (to) => (bpm = Math.min(170, to)),
-      loud: (yes) => master.gain.setTargetAtTime(yes ? 1 : 0.06, ctx.currentTime, 0.15),
+      loud: (yes) => master.gain.setTargetAtTime((yes ? 1 : 0.06) * lvl, ctx.currentTime, 0.15),
+      level: (v) => {
+        lvl = v;
+        master.gain.setTargetAtTime(0.06 * lvl, ctx.currentTime, 0.4);
+      },
       get bpm() { return bpm; },
     };
   },

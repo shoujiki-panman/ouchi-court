@@ -166,6 +166,19 @@
   button:disabled { opacity: .3; cursor: default; }
   button.sub { background: #2a1838; }
   button.big { font-size: 1.25rem; padding: 16px 30px; background: linear-gradient(90deg, var(--pink), var(--purple)); }
+  /* ひとりで挑戦の点数 */
+  #soloScore { display: none; position: absolute; left: 50%; top: 34px; transform: translateX(-50%); z-index: 4; gap: 10px; align-items: baseline; background: rgba(0,0,0,.7); padding: 4px 14px; border: 2px solid var(--gold); }
+  #soloScore .me { color: var(--pink); font-size: 1.4rem; }
+  #soloScore .rival { color: #3fa9ff; font-size: 1.4rem; }
+  #soloScore .vs { color: #fff; }
+  #soloScore small { color: var(--muted); font-size: .7rem; margin-left: 6px; font-family: system-ui; }
+  /* ひとりで挑戦のお題カード */
+  #topicCard { display: none; margin: 6px 0 10px; padding: 10px 14px; background: #1a0c26; border-left: 6px solid var(--gold); }
+  #topicCard b { font-size: 1.1rem; color: var(--gold); }
+  #topicCard p { margin: 4px 0; font-size: .9rem; }
+  #topicCard .pc { display: flex; gap: 12px; flex-wrap: wrap; font-size: .85rem; }
+  #topicCard small { color: var(--muted); }
+  #topicCard a { color: var(--gold); }
   /* ひとりで挑戦のお題えらび */
   #topics { display: none; margin: 10px 0; }
   #topics .pick { margin-bottom: 6px; color: var(--gold); }
@@ -195,10 +208,12 @@
   <header><h1 class="display">おうち裁判</h1></header>
 
   <div id="steps"></div>
+  <div id="topicCard"></div>
   <div id="stage">
     <div id="bg"></div>
     <div id="balance"><span id="balP">原告</span><div id="balTrack"><div id="balFill"></div><div id="balMark">⚖️</div></div><span id="balD">被告</span></div>
     <div id="feverClock" class="display"></div>
+    <div id="soloScore" class="display"></div>
     <div id="score" class="display">論破 <span id="pts">0</span>pt <span id="combo"></span></div>
     <div id="title"><div><div style="color:var(--muted)">本日の称号</div><div class="badge display" id="badge">論破王</div></div></div>
     <div id="speed"></div>
@@ -221,6 +236,7 @@
     <button id="objection" class="sub" disabled><span>異議あり！</span></button>
     <button id="evidenceBtn" class="sub" disabled><span>📷 証拠品</span></button>
     <button id="verdictBtn" class="sub" disabled><span>⚖️ 判決へ</span></button>
+    <button id="turnBtn" class="big display" style="display:none"><span>✋ 以上！</span></button>
     <button id="pauseBtn" class="sub" disabled><span>⏸ 一時停止</span></button>
     <button id="close" class="sub" disabled><span>閉廷</span></button>
     <button id="resume" class="big display"><span>再開する</span></button>

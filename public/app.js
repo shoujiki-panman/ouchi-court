@@ -10,33 +10,39 @@ const BAILIFF = `あなたは家庭の法廷「おうち裁判」の書記官タ
 1. 開廷を宣言し、原告に名前と、何があったかを聞く。名前を聞いたら「〇〇さんですね？」と一度だけ確かめ、違うと言われたら正しい名前に直す（音声の聞き取りで名前を聞き違えることがあるため）。被告の名前も同じように確かめる。弁護人ポン子として「つまり〇〇さんは、〜と言いたいのですね？」と整理する。
 2. 被告に名前と言い分を聞く。弁護人コン太として同じように整理する。
 3. 「議論タイム、スタート！」と宣言する。「おかしいと思ったら『異議あり！』、相手の言葉をやっつけたいときは『論破！』と言ってね」と伝える。原告と被告に交互に、相手の言い分への言い返しを聞く。2〜3往復するまで続ける。弁護人は自分から「異議あり！」と言わない（異議は子どもが言う）。
-4. 「証拠品タイム！」と宣言する。「証拠になる物はある？あったら証拠品ボタンでカメラに見せてね」と聞く。証拠品が届いたら何が写っているか言う。見ていた人がいれば証人として呼ぶ。証拠がないときや、事実を確かめたいときは「調査官ホー、出番です！」と言って investigate を呼ぶ（調べるなら search、その場面を絵にするなら illustrate）。
+4. 「証拠品タイム！」と宣言する。「証拠になる物はある？あったら証拠品ボタンでカメラに見せてね」と聞く。証拠品が届いたら何が写っているか言う。見ていた人がいれば証人として呼ぶ。「調べてほしいことがあれば調査官ホーを呼べるよ」と一言だけ伝える。子どもが頼んだら「調査官ホー、出番です！」と言って investigate を呼ぶ（調べるなら search、その場面を絵にするなら illustrate）。
 5. 二人に、最後に言っておきたいことを1つずつ聞く。
 6. 「判決が聞きたくなったら、判決ボタンを押すか『判決お願いします』と言ってね」と言う。だれかが「判決お願いします」と言うか、判決ボタンが押されるまで call_judge は絶対に呼ばない。それまでは議論や証拠品を続けてよい。
 7. 判決のあと、罰ゲームがちゃんとできたかを楽しく確かめ、「これにて閉廷！」で締める。
 法廷ドラマの決まり:
 - 誰かが「論破！」と言ったら（または論破の知らせが届いたら）、「おおっと、論破が出ました！」と盛り上げ、論破した人に名前と、どこがおかしいと思ったかを聞く。そのあと論破された側にも言い分を聞く。
 - 誰かが「異議あり！」と言ったら、「異議を認めます。どうぞ」と言って、その人の話を聞く。
-- だれかが「調べて」「本当？」「証拠がほしい」と言ったら、いつでも investigate を呼んでよい。
+- investigate は、子どもが「調べて」「証拠がほしい」とはっきり頼んだときだけ呼ぶ（自分から何度も呼ばない。1回の裁判で2回まで）。
 守ること: 次に話す人を必ず名前で呼ぶ。1回に聞くことは1つだけ。1回のせりふは2文まで。子どもが話している途中で口をはさまない。話がそれたらやさしく戻す。どちらかを悪者にしない。恥ずかしい思いをさせない。日本語で話す。`;
 
 // 司会のキレ（10/16「司会のキレが悪い」）
 const MC_STYLE = `司会のしかた（いちばん大事）:
-- テレビのバラエティの司会者のように、キレよく、テンポよく。1回のせりふは1〜2文・30字前後。長い説明・前置き・丁寧すぎる敬語（〜でしょうか、〜いただけますか）はやめて、元気なタメ口寄りで話す。
+- テレビのバラエティの司会者のように、キレよく。1回のせりふは1〜2文・30字前後。長い説明・前置き・丁寧すぎる敬語（〜でしょうか、〜いただけますか）はやめて、親しみやすいタメ口寄りで話す。
+- 最初は落ち着いて、ゆっくりやさしく。子どもが考えている間はせかさない。「テンポを上げて」の知らせが来たら速く短く熱く、「落ち着いて」の知らせが来たらまたゆっくりに戻す。
 - 合いの手を入れる: 「さあ！」「おおっと！」「ここで！」「なるほどー！」「出たー！」。
 - 相手の言葉を一言でツッコむ・まとめる（例:「プリン事件、勃発！」「それは聞き捨てならない！」）→ すぐ次の人に名前を呼んで1つだけ聞く。
 - 同じ言い回しをくり返さない。子どもの言葉をそのまま拾って返す。`;
 
 // ひとりで挑戦（お題で議論）のときの段取り
-const SOLO = (topic, side) => `あなたは「おうち裁判 ひとりで挑戦モード」の書記官タヌ吉（司会）。子ども1人が、お題についてAIの弁護人と議論で対決する。
+const SOLO = (topic, side) => `あなたは「おうち裁判 ひとりで挑戦モード」の書記官タヌ吉（司会）。子ども1人が、お題についてライバル弁護士コン太と議論バトルで対決する。
+ルール（最初に必ずはっきり伝える）: 議論タイムで子どもが意見を言うたびに、判事たちがその理由を採点する。理由がしっかりしていれば子どもに1ポイント、理由が弱ければコン太に1ポイント。先に3ポイント取った方の勝ち。点数の知らせが届いたら、短く実況して盛り上げる（「〇〇さん、1ポイント先取！」等）。
 お題:「${topic.motion}」（背景: ${topic.background}）
 子どもは「${side}」側。弁護人ポン子は子どもの味方（子どもの言いたいことを整理して助ける）。弁護人コン太は反対側として、子どもと本気で（でもやさしく）議論する。どちらもあなたが声色を変えて演じ、名乗ってから話す。
 段取り:
-1. 開廷！お題をテンポよく紹介し、子どもに名前を聞いて「〇〇さんですね？」と確かめる。
+1. 開廷！子どもに名前を聞いて「〇〇さんですね？」と確かめる。
+1.5 お題の説明：何があったかを、下の説明を使って10歳にも分かるように2〜3文で話す。そのあと「賛成の人はこう考える：…」「反対の人はこう考える：…」と例を1つずつ言い、「${side}側のあなたは、どう思う？」と聞く。子どもが分からないことを聞いてきたら、やさしく答える。
+説明: ${topic.detail ?? topic.background}
+賛成の例: ${topic.pro ?? "（自分で考えて）"}
+反対の例: ${topic.con ?? "（自分で考えて）"}
 2. 子どもに「${side}」の理由を聞く。ポン子として「つまり〜ってことだね！」と整理。
 3. コン太として反対側の理由を1つ、短く言う。
-4. 「議論タイム、スタート！」子どもとコン太で2〜3往復。子どもが良いことを言ったらしっかりほめる。「異議あり！」「論破！」もどんどん使ってと伝える。
-5. 「証拠品タイム！」調べたいことがあれば調査官ホーを呼ぶ（investigate）。
+4. 「議論タイム、スタート！」ここからはターン制。子どものターン → コン太のターン を2〜3回くり返す。子どものターンでは「〇〇さんのターン！ゆっくり考えながらでいいよ。言い終わったら『以上！』ね」と言って黙って聞く（子どもが話し終わるまで口をはさまない。少し黙っても「以上」と言うまで待つ）。コン太のターンでは、子どもの言ったことを受けて反論を1つだけ、短く言い、「さあ、〇〇さんのターン！」と返す。子どもが良いことを言ったらしっかりほめる。
+5. 「証拠品タイム！」「調べてほしいことがあれば調査官ホーを呼べるよ」と一言だけ伝え、子どもが頼んだら investigate を呼ぶ。
 6. 最後のひとことを聞き、「判決ボタンか『判決お願いします』で判決だ！」と言う。それまで call_judge は呼ばない。
 7. 判決のあと、罰ゲーム（負けたらコン太がやることもある）を確かめて「これにて閉廷！」。
 守ること: 子どもを言い負かして終わらせない。子どもが考えを言えたことを必ずほめる。日本語で話す。`;
@@ -246,6 +252,17 @@ async function openCourt(resume = false) {
   }
   if (!resume) {
     parties.length = 0;
+    record.length = 0;
+    evidence.length = 0;
+    $("evidence").innerHTML = "";
+    $("log").textContent = "";
+    $("box").textContent = "";
+    heatVal = 0;
+    tempo = "calm";
+    investigations = 0;
+    soloScore = { player: 0, rival: 0 };
+    $("soloScore").style.display = mode === "solo" ? "flex" : "none";
+    if (mode === "solo") showSoloScore();
     $("balP").textContent = mode === "solo" ? `あなた（${side}）` : "原告";
     $("balD").textContent = mode === "solo" ? "コン太（反対側）" : "被告";
     balanceVal = 0;
@@ -285,14 +302,17 @@ async function openCourt(resume = false) {
         tools: [{ functionDeclarations: [CALL_JUDGE, INVESTIGATE] }],
         inputAudioTranscription: {},
         outputAudioTranscription: {},
-        realtimeInputConfig: { automaticActivityDetection: { silenceDurationMs: 800 } },
+        realtimeInputConfig: { automaticActivityDetection: { silenceDurationMs: mode === "solo" ? 2500 : 1300 } },
       },
       on: {
         ready: async () => {
           const restart = resume && record.length ? `接続が切れたので再開します。これまでの法廷記録:\n${record.map((r) => `${r.who}: ${r.text}`).join("\n").slice(-3000)}\n続きから進めてください（開廷の宣言はしない）。${judged ? "判決はもう出ています。" : ""}` : "開廷してください。";
           live.send({ clientContent: { turns: [{ role: "user", parts: [{ text: restart }] }], turnComplete: true } });
           try {
-            stopMic = await startMic((b64) => !judging && !paused && live.audio(b64));
+            stopMic = await startMic((b64, lvl) => {
+              if (judging || paused) return;
+              live.audio(b64);
+            });
             status("開廷中：そのまま話しかけてください");
           } catch (e) {
             status(`マイクが使えません（${e.message}）。ブラウザのマイクの許可を確かめてください。`);
@@ -306,6 +326,7 @@ async function openCourt(resume = false) {
           speaker.play(b64);
         },
         heard: (t) => {
+
           if (/論破|ろんぱ/.test(t)) ronpa();
           else if (/異議あり|いぎあり/.test(t)) {
             objectionCount++;
@@ -346,7 +367,9 @@ async function openCourt(resume = false) {
           talk(false);
         },
         turnComplete: () => {
+          dbg.tc++;
           speakingTurn = "";
+          if (mode === "solo") $("turnBtn").style.display = "inline-block";
           setTimeout(() => !speaker.busy && beat?.loud(false), 600);
           closeNote();
           setTimeout(() => !speaker.busy && talk(false), 400);
@@ -378,6 +401,7 @@ async function judge(call) {
     return;
   }
   judged = true;
+  endTurn();
   step("verdict");
   judging = true;
   closeNote();
@@ -387,7 +411,7 @@ async function judge(call) {
   const drum = sfx.drumroll(speaker.ctx, 12);
   try {
     const names = mode === "solo" ? [parties[0] ?? "プレイヤー", "コン太"] : parties.length === 2 ? [...parties] : [call.args?.plaintiff, call.args?.defendant].filter(Boolean);
-    const soloNote = mode === "solo" ? `（ひとりで挑戦モード: お題「${topic?.motion}」。子ども=${parties[0] ?? "プレイヤー"}（${side}）vs 弁護人コン太（反対側）。子どもの理由の良さで判定する。勝ち負けは子ども名か「コン太」で）\n` : "";
+    const soloNote = mode === "solo" ? `（ひとりで挑戦モード: お題「${topic?.motion}」。ポイント あなた${soloScore.player} - ${soloScore.rival}コン太（多い方を勝ちにする）。子ども=${parties[0] ?? "プレイヤー"}（${side}）vs 弁護人コン太（反対側）。子どもの理由の良さで判定する。勝ち負けは子ども名か「コン太」で）\n` : "";
     const lean = balanceVal < -20 ? `${parties[0]}さん寄り` : balanceVal > 20 ? `${parties[1]}さん寄り` : "五分五分";
     const text = `${soloNote}原告: ${parties[0]} / 被告: ${parties[1]} / 法廷の天秤: ${lean}（${balanceVal}）\n${call.args?.summary ?? ""}\n\n${record.map((r) => `${r.who}: ${r.text}`).join("\n")}`.slice(-6000);
     const v = await api("/api/verdict", { record: text, names, evidence: evidence.map((e) => e.label) });
@@ -425,10 +449,19 @@ async function judge(call) {
 let beat, heatVal = 0, points = 0, combo = 0, comboTimer, ronpaCount = 0, objectionCount = 0, evidenceCount = 0;
 let fever = false;
 // 盛り上がり（heat）はビートの速さだけに使う。画面のゲージは天秤（どちらが優勢か）に置きかえた（10/16「何でも増えればいいんだっけ？」）
+let tempo = "calm";
 function heat(add) {
   heatVal = Math.max(0, Math.min(100, heatVal + add));
-  beat?.faster(92 + heatVal * 0.7);
+  // 音楽は白熱してから（最初は無音で、ゆっくり話せるように 10/16）
+  beat?.faster(80 + heatVal * 0.9);
+  beat?.level(heatVal < 30 ? 0 : heatVal < 60 ? 0.5 : 1);
+  const next = heatVal >= 60 ? "hot" : heatVal <= 25 ? "calm" : tempo;
+  if (next !== tempo && live) {
+    tempo = next;
+    live.send({ clientContent: { turns: [{ role: "user", parts: [{ text: tempo === "hot" ? "（議論が白熱してきました。テンポを上げて！速く短く熱く回してください）" : "（少し落ち着きました。ゆっくりやさしい進行に戻してください）" }] }], turnComplete: false } });
+  }
 }
+setInterval(() => heatVal > 0 && !judging && heat(-1), 1500); // 何もなければ少しずつ冷める
 
 // 天秤ゲージ：マイナスは原告側、プラスは被告側が優勢。発言のたびに AI が「どちらを強くしたか」を判定して動かす
 let balanceVal = 0, ronpaBoost = false;
@@ -524,6 +557,7 @@ function crowd(kind) {
   }
 }
 function react(kind = "statement") {
+  if (kind === "statement" && heatVal < 50) return; // ふつうの発言では騒がない
   crowd(kind);
   jiggleSeats();
   const pool = { statement: ["😮", "🤔", "👀", "😂"], ronpa: ["🔥", "💥", "😱", "⚡"], objection: ["⚡", "😮"], verdict: ["🎉", "👏", "😂", "🎊"] }[kind];
@@ -605,6 +639,77 @@ function togglePause() {
   }
 }
 
+// ひとりで挑戦：子どもの番は、こちらで始めて終える（AI が途中で割り込まないように）。
+// 終わるのは「以上」と言う／「以上！」ボタン／3.5秒だまる／時間切れ のどれか
+let myTurn = false, turnTimer, quietSince = 0, spoke = false, turnLeft = 0;
+// 書記官の声が流れ終わってから、子どもの番を始める（返事の生成は声より先に終わる）
+let waiting = false;
+const dbg = { tc: 0, wait: 0, begin: 0, skip: "" };
+async function waitThenBegin() {
+  dbg.wait++;
+  if (waiting) return;
+  waiting = true;
+  for (let i = 0; i < 120 && speaker?.busy; i++) await new Promise((w) => setTimeout(w, 250));
+  await new Promise((w) => setTimeout(w, 400));
+  waiting = false;
+  if (!judging && !paused && !speaker?.busy) beginTurn();
+  else dbg.skip = `judging=${judging} paused=${paused} busy=${speaker?.busy}`;
+}
+function beginTurn() {
+  dbg.begin++;
+  if (myTurn || !live) return;
+  myTurn = true;
+  spoke = false;
+  quietSince = 0;
+  turnLeft = stepNow >= 3 ? 45 : 20;
+  live.send({ realtimeInput: { activityStart: {} } });
+  $("turnBtn").style.display = "inline-block";
+  beat?.loud(false);
+  clearInterval(turnTimer);
+  turnTimer = setInterval(() => {
+    $("feverClock").textContent = `あなたのターン ${turnLeft}`;
+    if (--turnLeft < 0) endTurn();
+  }, 1000);
+}
+function turnLevel(lvl) {
+  if (lvl > 0.08) {
+    spoke = true;
+    quietSince = 0;
+  } else if (spoke) {
+    quietSince ||= Date.now();
+    if (Date.now() - quietSince > 3500) endTurn();
+  }
+}
+function endTurn() {
+  if (!myTurn) return;
+  myTurn = false;
+  clearInterval(turnTimer);
+  $("feverClock").textContent = "";
+  $("turnBtn").style.display = "none";
+  live?.send({ realtimeInput: { activityEnd: {} } });
+}
+
+// ひとりで挑戦の勝ち負け：議論タイムの発言ごとに判事が採点し、先に3ポイントで勝ち
+let soloScore = { player: 0, rival: 0 };
+function showSoloScore() {
+  $("soloScore").innerHTML = `<span class="me">あなた ${soloScore.player}</span><span class="vs">-</span><span class="rival">${soloScore.rival} コン太</span><small>先に3ポイントで勝ち</small>`;
+}
+async function soloPoint(point, why) {
+  if (judged || stepNow < 3) return; // 名前や説明のあいだは数えない（議論タイムから）
+  soloScore[point]++;
+  showSoloScore();
+  const mine = point === "player";
+  shout(mine ? "あなたのポイント！" : "コン太のポイント…");
+  popAt(why, mine ? 30 : 70, 30);
+  speaker?.clip(mine ? "crowd/oo.mp3" : "crowd/ee.mp3", 0.5);
+  if (mine) score(100, "主張");
+  live?.send({ clientContent: { turns: [{ role: "user", parts: [{ text: `（判事の採点: ${mine ? "子ども" : "コン太"}に1ポイント。理由「${why}」。いま あなた${soloScore.player} - ${soloScore.rival}コン太。短く実況して、次のターンへ）` }] }], turnComplete: false } });
+  if (soloScore.player >= 3 || soloScore.rival >= 3) {
+    await new Promise((w) => setTimeout(w, 1500));
+    live?.send({ clientContent: { turns: [{ role: "user", parts: [{ text: `（${soloScore.player >= 3 ? "子ども" : "コン太"}が3ポイント先取！勝負あり。「勝負あり！」と言って、すぐ call_judge を呼んでください）` }] }], turnComplete: true } });
+  }
+}
+
 // 段の掲示：議論タイム・証拠品タイム
 let shownPhase = "";
 function phase(kind) {
@@ -669,7 +774,12 @@ async function voteTime(panel) {
 }
 
 // 調査官ホーの出番：調べるか、再現イラストを作って、証拠品ファイルに入れる
+let investigations = 0;
 async function investigateCall(call) {
+  if (++investigations > 2) {
+    live.toolResponse([{ id: call.id, name: call.name, response: { result: "調査官ホーは今日はもう出番を使い切った（1回の裁判で2回まで）。書記官は二人の言い分で進める。" } }]);
+    return;
+  }
   const { query = "", mode = "search" } = call.args ?? {};
   onStage("detective", mode === "illustrate" ? `再現イラストを作成中…「${query}」` : `調査中…「${query}」`, { fresh: true });
   shout("調査開始！");
@@ -743,8 +853,9 @@ async function lawyersCheck(statement) {
         ? await api("/api/opponent", { topic: topic?.motion, side, record: recent, last: statement })
         : await api("/api/lawyers", { record: recent, last: statement, plaintiff: parties[0], defendant: parties[1] });
     swayBy(r.sway ?? 0);
+    if (mode === "solo" && r.point && statement.length >= 8) soloPoint(r.point, r.why);
     // 対戦モードでは勝手に「異議あり」を出さない（10/16「勝手に異議アリが発動する」）。異議は子どもが言う・押す
-    if (mode === "solo" && r.id && r.id !== lastObjector) {
+    if (false && mode === "solo" && r.id && r.id !== lastObjector) { // 10/16「すぐ割り込んでくる」→ 相手はコン太のターンでだけ話す
       lastObjector = r.id;
       // 話している途中に割り込むとせりふが切れる（10/16）。いまの人が話し終わるまで待つ
       for (let i = 0; i < 40 && speaker?.busy; i++) await new Promise((w) => setTimeout(w, 250));
@@ -806,6 +917,7 @@ function closeCourt() {
 
 $("open").onclick = () => {
   mode = "versus";
+  $("topicCard").style.display = "none";
   openCourt(false);
 };
 // ひとりで挑戦：お題を選んで、賛成か反対かを決めてから開廷
@@ -817,7 +929,7 @@ $("solo").onclick = async () => {
     $("topics").innerHTML =
       `<div class="pick">お題をえらんでね</div>` +
       topics
-        .map((t, i) => `<button class="topic sub" data-i="${i}"><span><b>${t.motion}</b><small>${t.background}${t.source ? "（最近のニュースから）" : ""}</small></span></button>`)
+        .map((t, i) => `<button class="topic sub" data-i="${i}"><span><b>${t.motion}</b><small>${t.detail ?? t.background}${t.source ? "（いま話題から）" : ""}</small></span></button>`)
         .join("") +
       `<div class="sides"><button class="side" data-s="賛成"><span>👍 賛成で戦う</span></button><button class="side sub" data-s="反対"><span>👎 反対で戦う</span></button></div>`;
     let chosen = topics[0];
@@ -831,6 +943,9 @@ $("solo").onclick = async () => {
       topic = chosen;
       side = b.dataset.s;
       $("topics").style.display = "none";
+      $("topicCard").innerHTML = `<b>お題：${topic.motion}</b><p>${topic.detail ?? topic.background}</p><div class="pc"><span>👍 賛成：${topic.pro ?? "？"}</span><span>👎 反対：${topic.con ?? "？"}</span></div><small>あなたは「${side}」側${topic.source ? `｜話題のもと：<a href="${topic.source.url}" target="_blank">${topic.source.title}</a>` : ""}</small>`;
+      $("topicCard").style.display = "block";
+      shout("あなた VS コン太");
       openCourt(false);
     }));
   } catch (e) {
@@ -843,6 +958,7 @@ $("close").onclick = async () => {
   setTimeout(closeCourt, 1500);
 };
 $("ronpa").onclick = () => ronpa();
+$("turnBtn").onclick = () => live?.send({ clientContent: { turns: [{ role: "user", parts: [{ text: "（以上です。子どもが話し終わりました。受けて次へ進んでください）" }] }], turnComplete: true } });
 $("pauseBtn").onclick = togglePause;
 $("verdictBtn").onclick = () => {
   if (!live || judged) return;
@@ -873,6 +989,7 @@ if (new URLSearchParams(location.search).has("debug")) {
       live.send({ clientContent: { turns: [{ role: "user", parts: [{ text }] }], turnComplete: true } });
     },
     ronpa: () => ronpa(),
+    state: () => ({ myTurn, turnLeft, connected: live?.ws?.readyState, mode, ...dbg }),
   };
 }
 
