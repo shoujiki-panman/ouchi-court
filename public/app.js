@@ -1079,6 +1079,9 @@ function closeCourt() {
 
 $("open").onclick = () => {
   mode = "versus";
+  $("intro").classList.add("hide");
+  document.body.classList.remove("solo");
+  document.body.classList.add("versus");
   $("topicCard").style.display = "none";
   openCourt(false);
 };
@@ -1103,6 +1106,7 @@ $("solo").onclick = async () => {
     $("topics").querySelector(".topic").classList.add("chosen");
     $("topics").querySelectorAll(".side").forEach((b) => (b.onclick = async () => {
       mode = "solo";
+      document.body.classList.remove("versus");
       document.body.classList.add("solo");
       topic = chosen;
       side = b.dataset.s;
@@ -1163,7 +1167,6 @@ if (new URLSearchParams(location.search).has("debug")) {
 
 
 // 対戦モードは今は出さない（10/16「対戦はまだいらないかも」）。コードは残す
-$("open").style.display = "none";
 
 $("resume").style.display = "none";
 // タイトル画面に、ライバルの戦績を出す

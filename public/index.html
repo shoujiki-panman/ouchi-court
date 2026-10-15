@@ -205,6 +205,10 @@
   #intro .rivalCard img { width: 64px; height: 64px; object-fit: contain; }
   #intro .rivalCard b { display: block; color: #3fa9ff; }
   #intro .rivalCard span { font-size: .85rem; color: var(--muted); }
+  #intro .versusBtn { font-size: 1rem; padding: 10px 24px; background: transparent; border: 2px solid #3fa9ff; color: #fff; animation: none; box-shadow: none; }
+  #intro .versusBtn:hover { background: rgba(63,169,255,.2); }
+  /* 判決ボタンは、ふたりで対戦のときだけ（ひとりは3ラウンドで自動） */
+  body.versus #verdictBtn { display: inline-block !important; }
   #intro .how { font-size: .8rem; color: var(--muted); max-width: 30em; }
   #intro button { font-size: 1.4rem; padding: 16px 40px; background: linear-gradient(90deg, var(--pink), var(--purple)); animation: pulse .8s infinite alternate; }
   /* お題えらび（舞台の上に重ねる） */
@@ -293,7 +297,8 @@
       <div class="logo display">おうち裁判</div>
       <div class="tag">AIライバルと 3分ディベートバトル</div>
       <div class="rivalCard"><img src="img/lawyerD.png" alt=""><div><b class="display">ライバル コン太</b><span id="rivalLine">はじめての対決！</span></div></div>
-      <button id="solo" class="big display"><span>🎤 挑戦する</span></button>
+      <button id="solo" class="big display"><span>🎤 ひとりで挑戦</span></button>
+      <button id="open" class="versusBtn display"><span>🆚 ふたりで対戦（けんかの裁判）</span></button>
       <div class="how">お題に「賛成」か「反対」で意見を言おう。理由・具体例・反論で点が入る！</div>
     </div>
     <div id="topics"></div>
@@ -311,7 +316,6 @@
     <button id="pauseBtn" class="mini" disabled><span>⏸ 一時停止</span></button>
     <button id="close" class="mini" disabled>✕ 閉廷</button>
     <button id="verdictBtn" class="mini" disabled style="display:none"><span>⚖️ 判決へ</span></button>
-    <button id="open" class="mini" style="display:none"><span>🆚 対戦で開廷</span></button>
     <input id="pass" type="password">
   </div>
   <div id="cam"><video id="video" autoplay playsinline muted></video><br><button id="submitEv"><span>この証拠品を突きつける</span></button> <button id="cancelEv" class="sub"><span>やめる</span></button></div>
