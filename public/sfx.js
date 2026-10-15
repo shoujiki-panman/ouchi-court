@@ -60,6 +60,23 @@ export const sfx = {
     for (let i = 0; i < seconds * 16; i++) srcs.push(hit(ctx, t + i / 16, { freq: 1800, type: "bandpass", decay: 0.06, gain: 0.25 + 0.2 * (i / (seconds * 16)) }));
     return { stop: () => srcs.forEach((s) => { try { s.stop(); } catch {} }) };
   },
+  // 異議あり！の「ジャン！」（低い和音を短く強く）
+  async objection(ctx) {
+    const t = ctx.currentTime + 0.02;
+    [196, 247, 294, 392].forEach((hz) => {
+      const o = ctx.createOscillator();
+      o.type = "square";
+      o.frequency.value = hz;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.12, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+      o.connect(g).connect(ctx.destination);
+      o.start(t);
+      o.stop(t + 0.55);
+    });
+    hit(ctx, t, { freq: 3000, type: "highpass", decay: 0.3, gain: 0.4 });
+    await wait(0.5);
+  },
   async cymbal(ctx) {
     hit(ctx, ctx.currentTime + 0.02, { freq: 6000, type: "highpass", decay: 1.2, gain: 0.5 });
     await wait(0.8);

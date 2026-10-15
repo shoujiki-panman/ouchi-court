@@ -9,24 +9,33 @@ const GEMINI = "https://generativelanguage.googleapis.com/v1beta";
 
 const JUDGE_PROMPT =
   "あなたは家庭の裁判所の「タヌキ判事」。きょうだいや家族の小さなけんかを、法廷ごっこで楽しく裁く。相手は5〜10歳。" +
-  "重々しく、でもちょっとおとぼけで笑える判事。法廷の記録と過去の判例を読み、判決を出す。" +
+  "重々しく、でもちょっとおとぼけで笑える裁判長。法廷の記録・3人の判事の票・過去の判例を読み、判決を出す。結論（だれの勝ちか・票数）はすでに決まっているので、そのとおりに言い渡し、変えないこと。" +
   "speech は読み上げる判決文で、必ず「判決を言い渡します。」で始め、4文まで: 勝った方（引き分け・和解もよい）／どちらの言い分のどこが良くてどこがよくなかったか／" +
-  "判例があれば一言ふれる（例: 被告は先週もおやつの件で…）／罰。" +
+  "判例が渡されたときだけ、その中身どおりに一言ふれる（判例がないときや、No precedents のときは過去の話をしない。日付や中身を作らない）／罰。" +
   "罰は笑える小さな挑戦（変顔を10秒・ゾウのまねで部屋を一周・相手のいいところを3つ言う 等）か、仲直りの合図か、家の約束（歯磨き一番乗り 等）。" +
   "子どもを恥ずかしい目にあわせる罰、食べ物やおもちゃを取り上げる罰、痛い罰は絶対に出さない。どちらかを悪者と決めつけない。" +
   '出力は JSON だけ: {"speech": "...", "winner": "名前か draw", "sentence": "罰", "issue": "何のけんか（10字程度）", "plaintiff": "名前", "defendant": "名前"}';
 
 const json = (data, status = 200) => Response.json(data, { status });
 
+// 混んでいるとき（high demand・503・429）は、次のモデルで試す
+const FALLBACK = { "gemini-3.5-flash": ["gemini-flash-latest", "gemini-3.8-flash"], "gemini-flash-lite-latest": ["gemini-3.1-flash-lite", "gemini-3.5-flash"], "gemini-3.8-flash-lite-tts": ["gemini-3.8-flash-tts", "gemini-2.5-flash-preview-tts"] };
+
 async function gemini(env, model, body) {
-  const r = await fetch(`${GEMINI}/models/${model}:generateContent`, {
-    method: "POST",
-    headers: { "x-goog-api-key": env.GEMINI_API_KEY, "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const j = await r.json();
-  if (!r.ok) throw new Error(`${model}: ${j.error?.message ?? r.status}`);
-  return j;
+  let last;
+  for (const m of [model, ...(FALLBACK[model] ?? [])]) {
+    const r = await fetch(`${GEMINI}/models/${m}:generateContent`, {
+      method: "POST",
+      headers: { "x-goog-api-key": env.GEMINI_API_KEY, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const j = await r.json();
+    if (r.ok) return j;
+    last = new Error(`${m}: ${j.error?.message ?? r.status}`);
+    if (!(r.status === 503 || r.status === 429 || /demand|overloaded|unavailable/i.test(j.error?.message ?? ""))) throw last;
+    console.log(`${m} busy, trying next`);
+  }
+  throw last;
 }
 
 const mcp = async (env) => {
@@ -55,14 +64,63 @@ async function token(env) {
   return { token: j.name, model: env.LIVE_MODEL };
 }
 
-// 判決：判例を引く → 判事が考える → 判例集に記録する
+// 合議の判事3人。見る所と、考える AI（会社）がそれぞれ違う。
+const PANEL = [
+  { id: "heart", title: "気持ち判事", view: "どちらがどれだけ嫌な気持ちになったか、気持ちを大事にして判断する", via: "gemini", model: "gemini-flash-lite-latest" },
+  { id: "rule", title: "ルール判事", view: "順番・持ち主・先にしたこと など、家のルールと公平さで判断する", via: "workers", model: "@cf/mistralai/mistral-small-3.1-24b-instruct" },
+  { id: "peace", title: "仲直り判事", view: "どう決めれば二人が一番早く仲直りできるかで判断する", via: "workers", model: "@cf/meta/llama-4-scout-17b-16e-instruct" },
+];
+const PANEL_PROMPT = (j) =>
+  `あなたは家庭の法廷の「${j.title}」。${j.view}。子どものけんかなので、どちらかを悪者にしない。` +
+  '出力は JSON だけ: {"vote": "勝った方の名前か draw", "reason": "25字以内の理由"}';
+
+const parseJson = (raw) => JSON.parse(String(raw).slice(String(raw).indexOf("{"), String(raw).lastIndexOf("}") + 1));
+
+async function panelVote(env, j, record) {
+  const user = `法廷の記録:\n${record}`;
+  if (j.via === "gemini") {
+    const out = await gemini(env, j.model, {
+      systemInstruction: { parts: [{ text: PANEL_PROMPT(j) }] },
+      contents: [{ role: "user", parts: [{ text: user }] }],
+      generationConfig: { responseMimeType: "application/json", temperature: 0.6 },
+    });
+    return parseJson(out.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join(""));
+  }
+  const out = await env.AI.run(j.model, {
+    messages: [
+      { role: "system", content: PANEL_PROMPT(j) },
+      { role: "user", content: user },
+    ],
+    max_tokens: 200,
+    temperature: 0.6,
+    response_format: { type: "json_object" },
+  });
+  const r = out.response ?? out.choices?.[0]?.message?.content;
+  return typeof r === "string" ? parseJson(r) : r;
+}
+
+// 判決：判例を引く → 3人の判事が票を入れる → 裁判長タヌキがまとめて言い渡す → 判例集に記録する
 async function verdict(env, { record, names }) {
   const client = await mcp(env);
-  const prec = names?.length ? textOf(await client.callTool("get_precedents", { names })) : "No precedents.";
+  const [prec, ...votes] = await Promise.all([
+    names?.length ? client.callTool("get_precedents", { names }).then(textOf).catch(() => "No precedents.") : "No precedents.",
+    ...PANEL.map((j) =>
+      Promise.race([panelVote(env, j, record), new Promise((_, no) => setTimeout(() => no(new Error("timeout")), 9000))])
+        .then((v) => ({ title: j.title, model: j.model, vote: String(v?.vote ?? "draw"), reason: String(v?.reason ?? "").slice(0, 40) }))
+        .catch(() => ({ title: j.title, model: j.model, vote: "draw", reason: "（考えがまとまらず棄権）" })),
+    ),
+  ]);
+  // 票を数えて結論はコードが決める（AI に数えさせたら「引き分け2・ハナ1」を「2対1でハナ」と読み違えた 10/15）
+  const count = new Map();
+  for (const v of votes) count.set(v.vote, (count.get(v.vote) ?? 0) + 1);
+  const [top, n] = [...count.entries()].sort((a, b) => b[1] - a[1])[0] ?? ["draw", 0];
+  const decided = n >= 2 ? top : "draw";
+  const score = decided === "draw" ? (n >= 2 ? `${n}対${votes.length - n}で和解（引き分け）` : "票が割れたので和解（引き分け）") : `${n}対${votes.length - n}で${decided}の勝ち`;
+  const tally = `${votes.map((v) => `${v.title}: ${v.vote === "draw" ? "和解" : `${v.vote}の勝ち`}（${v.reason}）`).join("\n")}\n結論（変えないこと）: ${score}`;
   const out = await gemini(env, env.JUDGE_MODEL, {
     systemInstruction: { parts: [{ text: JUDGE_PROMPT }] },
-    contents: [{ role: "user", parts: [{ text: `法廷の記録:\n${record}\n\n${prec}` }] }],
-    generationConfig: { responseMimeType: "application/json", temperature: 0.8, thinkingConfig: { thinkingLevel: "low" } },
+    contents: [{ role: "user", parts: [{ text: `法廷の記録:\n${record}\n\n判事たちの票:\n${tally}\n\n${prec}` }] }],
+    generationConfig: { responseMimeType: "application/json", temperature: 0.8 },
   });
   const raw = out.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "{}";
   const v = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1));
@@ -72,12 +130,14 @@ async function verdict(env, { record, names }) {
       plaintiff: v.plaintiff || names?.[0] || "原告",
       defendant: v.defendant || names?.[1] || "被告",
       issue: v.issue || "けんか",
-      winner: v.winner || "draw",
+      winner: decided,
       verdict: v.speech,
       sentence: v.sentence || "",
     })
     .catch((e) => console.log(`file_case failed: ${e}`));
-  return { ...v, precedents: prec };
+  const winner = decided;
+  const stamp = winner === "draw" ? "和解" : winner === (v.defendant || names?.[1]) ? "無罪" : "有罪";
+  return { ...v, panel: votes, stamp, precedents: prec };
 }
 
 // 判事の声（24kHz の PCM を base64 で返す）
