@@ -9,16 +9,37 @@ const BAILIFF = `あなたは家庭の法廷「おうち裁判」の書記官タ
 段取り（急がない。子どもが言い合いを楽しめるように、各段でしっかり時間をとる）:
 1. 開廷を宣言し、原告に名前と、何があったかを聞く。名前を聞いたら「〇〇さんですね？」と一度だけ確かめ、違うと言われたら正しい名前に直す（音声の聞き取りで名前を聞き違えることがあるため）。被告の名前も同じように確かめる。弁護人ポン子として「つまり〇〇さんは、〜と言いたいのですね？」と整理する。
 2. 被告に名前と言い分を聞く。弁護人コン太として同じように整理する。
-3. 「議論タイム、スタート！」と宣言する。「おかしいと思ったら『異議あり！』、相手の言葉をやっつけたいときは『論破！』と言ってね」と伝える。原告と被告に交互に、相手の言い分への言い返しを聞く。2〜3往復するまで続ける。弁護人も時々「異議あり！」と言って盛り上げてよい。
+3. 「議論タイム、スタート！」と宣言する。「おかしいと思ったら『異議あり！』、相手の言葉をやっつけたいときは『論破！』と言ってね」と伝える。原告と被告に交互に、相手の言い分への言い返しを聞く。2〜3往復するまで続ける。弁護人は自分から「異議あり！」と言わない（異議は子どもが言う）。
 4. 「証拠品タイム！」と宣言する。「証拠になる物はある？あったら証拠品ボタンでカメラに見せてね」と聞く。証拠品が届いたら何が写っているか言う。見ていた人がいれば証人として呼ぶ。証拠がないときや、事実を確かめたいときは「調査官ホー、出番です！」と言って investigate を呼ぶ（調べるなら search、その場面を絵にするなら illustrate）。
 5. 二人に、最後に言っておきたいことを1つずつ聞く。
 6. 「判決が聞きたくなったら、判決ボタンを押すか『判決お願いします』と言ってね」と言う。だれかが「判決お願いします」と言うか、判決ボタンが押されるまで call_judge は絶対に呼ばない。それまでは議論や証拠品を続けてよい。
 7. 判決のあと、罰ゲームがちゃんとできたかを楽しく確かめ、「これにて閉廷！」で締める。
 法廷ドラマの決まり:
 - 誰かが「論破！」と言ったら（または論破の知らせが届いたら）、「おおっと、論破が出ました！」と盛り上げ、論破した人に名前と、どこがおかしいと思ったかを聞く。そのあと論破された側にも言い分を聞く。
-- 誰かが「異議あり！」と言ったら、「異議を認めます。どうぞ」と言って、その人の話を聞く。弁護人の割り込み（知らせが届く）も同じように受ける。
+- 誰かが「異議あり！」と言ったら、「異議を認めます。どうぞ」と言って、その人の話を聞く。
 - だれかが「調べて」「本当？」「証拠がほしい」と言ったら、いつでも investigate を呼んでよい。
 守ること: 次に話す人を必ず名前で呼ぶ。1回に聞くことは1つだけ。1回のせりふは2文まで。子どもが話している途中で口をはさまない。話がそれたらやさしく戻す。どちらかを悪者にしない。恥ずかしい思いをさせない。日本語で話す。`;
+
+// 司会のキレ（10/16「司会のキレが悪い」）
+const MC_STYLE = `司会のしかた（いちばん大事）:
+- テレビのバラエティの司会者のように、キレよく、テンポよく。1回のせりふは1〜2文・30字前後。長い説明・前置き・丁寧すぎる敬語（〜でしょうか、〜いただけますか）はやめて、元気なタメ口寄りで話す。
+- 合いの手を入れる: 「さあ！」「おおっと！」「ここで！」「なるほどー！」「出たー！」。
+- 相手の言葉を一言でツッコむ・まとめる（例:「プリン事件、勃発！」「それは聞き捨てならない！」）→ すぐ次の人に名前を呼んで1つだけ聞く。
+- 同じ言い回しをくり返さない。子どもの言葉をそのまま拾って返す。`;
+
+// ひとりで挑戦（お題で議論）のときの段取り
+const SOLO = (topic, side) => `あなたは「おうち裁判 ひとりで挑戦モード」の書記官タヌ吉（司会）。子ども1人が、お題についてAIの弁護人と議論で対決する。
+お題:「${topic.motion}」（背景: ${topic.background}）
+子どもは「${side}」側。弁護人ポン子は子どもの味方（子どもの言いたいことを整理して助ける）。弁護人コン太は反対側として、子どもと本気で（でもやさしく）議論する。どちらもあなたが声色を変えて演じ、名乗ってから話す。
+段取り:
+1. 開廷！お題をテンポよく紹介し、子どもに名前を聞いて「〇〇さんですね？」と確かめる。
+2. 子どもに「${side}」の理由を聞く。ポン子として「つまり〜ってことだね！」と整理。
+3. コン太として反対側の理由を1つ、短く言う。
+4. 「議論タイム、スタート！」子どもとコン太で2〜3往復。子どもが良いことを言ったらしっかりほめる。「異議あり！」「論破！」もどんどん使ってと伝える。
+5. 「証拠品タイム！」調べたいことがあれば調査官ホーを呼ぶ（investigate）。
+6. 最後のひとことを聞き、「判決ボタンか『判決お願いします』で判決だ！」と言う。それまで call_judge は呼ばない。
+7. 判決のあと、罰ゲーム（負けたらコン太がやることもある）を確かめて「これにて閉廷！」。
+守ること: 子どもを言い負かして終わらせない。子どもが考えを言えたことを必ずほめる。日本語で話す。`;
 
 const CALL_JUDGE = {
   name: "call_judge",
@@ -74,6 +95,7 @@ for (const [id, [x, y]] of Object.entries(SEATS)) {
 const $ = (id) => document.getElementById(id);
 const record = [];
 const evidence = [];
+let mode = "versus", topic = null, side = "賛成";
 let live, stopMic, speaker, camStream, judging = false, speakingTurn = "", who = "", heardTurn = "", lastStatement = "";
 
 const pass = () => $("pass").value || localStorage.getItem("ouchi-court-pass") || "";
@@ -224,8 +246,8 @@ async function openCourt(resume = false) {
   }
   if (!resume) {
     parties.length = 0;
-    $("balP").textContent = "原告";
-    $("balD").textContent = "被告";
+    $("balP").textContent = mode === "solo" ? `あなた（${side}）` : "原告";
+    $("balD").textContent = mode === "solo" ? "コン太（反対側）" : "被告";
     balanceVal = 0;
     $("balMark").style.left = "50%";
   }
@@ -259,11 +281,11 @@ async function openCourt(resume = false) {
       model,
       setup: {
         generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Puck" } } } },
-        systemInstruction: { parts: [{ text: BAILIFF }] },
+        systemInstruction: { parts: [{ text: `${mode === "solo" ? SOLO(topic, side) : BAILIFF}\n\n${MC_STYLE}` }] },
         tools: [{ functionDeclarations: [CALL_JUDGE, INVESTIGATE] }],
         inputAudioTranscription: {},
         outputAudioTranscription: {},
-        realtimeInputConfig: { automaticActivityDetection: { silenceDurationMs: 1200 } },
+        realtimeInputConfig: { automaticActivityDetection: { silenceDurationMs: 800 } },
       },
       on: {
         ready: async () => {
@@ -364,9 +386,10 @@ async function judge(call) {
   beat?.stop();
   const drum = sfx.drumroll(speaker.ctx, 12);
   try {
-    const names = parties.length === 2 ? [...parties] : [call.args?.plaintiff, call.args?.defendant].filter(Boolean);
+    const names = mode === "solo" ? [parties[0] ?? "プレイヤー", "コン太"] : parties.length === 2 ? [...parties] : [call.args?.plaintiff, call.args?.defendant].filter(Boolean);
+    const soloNote = mode === "solo" ? `（ひとりで挑戦モード: お題「${topic?.motion}」。子ども=${parties[0] ?? "プレイヤー"}（${side}）vs 弁護人コン太（反対側）。子どもの理由の良さで判定する。勝ち負けは子ども名か「コン太」で）\n` : "";
     const lean = balanceVal < -20 ? `${parties[0]}さん寄り` : balanceVal > 20 ? `${parties[1]}さん寄り` : "五分五分";
-    const text = `原告: ${parties[0]} / 被告: ${parties[1]} / 法廷の天秤: ${lean}（${balanceVal}）\n${call.args?.summary ?? ""}\n\n${record.map((r) => `${r.who}: ${r.text}`).join("\n")}`.slice(-6000);
+    const text = `${soloNote}原告: ${parties[0]} / 被告: ${parties[1]} / 法廷の天秤: ${lean}（${balanceVal}）\n${call.args?.summary ?? ""}\n\n${record.map((r) => `${r.who}: ${r.text}`).join("\n")}`.slice(-6000);
     const v = await api("/api/verdict", { record: text, names, evidence: evidence.map((e) => e.label) });
     await voteTime(v.panel ?? []);
     const voice = await api("/api/voice", { text: v.speech }).catch(() => null);
@@ -689,6 +712,10 @@ let lastObjector = "", lawyerBusy = false;
 // 原告・被告の名前：開廷の前に入れてもらう（音声の聞き違えで「カントウさん」になった 10/16）。入っていなければ最初の発言から拾う
 const parties = [];
 function showParties() {
+  if (mode === "solo") {
+    if (parties[0]) $("balP").textContent = `${parties[0]}（${side}）`;
+    return;
+  }
   if (parties[0]) $("balP").textContent = `${parties[0]}（原告）`;
   if (parties[1]) $("balD").textContent = `${parties[1]}（被告）`;
 }
@@ -711,10 +738,14 @@ async function lawyersCheck(statement) {
   lawyerBusy = true;
   try {
     const recent = record.slice(-8).map((r) => `${r.who}: ${r.text}`).join("\n");
-    const r = await api("/api/lawyers", { record: recent, last: statement, plaintiff: parties[0], defendant: parties[1] });
+    const r =
+      mode === "solo"
+        ? await api("/api/opponent", { topic: topic?.motion, side, record: recent, last: statement })
+        : await api("/api/lawyers", { record: recent, last: statement, plaintiff: parties[0], defendant: parties[1] });
     swayBy(r.sway ?? 0);
-    if (r.id && r.id !== lastObjector) {
-      swayBy(r.defends === "plaintiff" ? -1 : 1); // 異議で、責められた側に少し戻す
+    // 対戦モードでは勝手に「異議あり」を出さない（10/16「勝手に異議アリが発動する」）。異議は子どもが言う・押す
+    if (mode === "solo" && r.id && r.id !== lastObjector) {
+
       lastObjector = r.id;
       onStage(r.id, r.line, { fresh: true });
       objectionCount++;
@@ -772,7 +803,39 @@ function closeCourt() {
   ["close", "objection", "evidenceBtn", "ronpa", "verdictBtn", "pauseBtn"].forEach((id) => ($(id).disabled = true));
 }
 
-$("open").onclick = () => openCourt(false);
+$("open").onclick = () => {
+  mode = "versus";
+  openCourt(false);
+};
+// ひとりで挑戦：お題を選んで、賛成か反対かを決めてから開廷
+$("solo").onclick = async () => {
+  $("topics").innerHTML = "<p>最近の話題からお題を探しています…</p>";
+  $("topics").style.display = "block";
+  try {
+    const { topics } = await api("/api/topics");
+    $("topics").innerHTML =
+      `<div class="pick">お題をえらんでね</div>` +
+      topics
+        .map((t, i) => `<button class="topic sub" data-i="${i}"><span><b>${t.motion}</b><small>${t.background}${t.source ? "（最近のニュースから）" : ""}</small></span></button>`)
+        .join("") +
+      `<div class="sides"><button class="side" data-s="賛成"><span>👍 賛成で戦う</span></button><button class="side sub" data-s="反対"><span>👎 反対で戦う</span></button></div>`;
+    let chosen = topics[0];
+    $("topics").querySelectorAll(".topic").forEach((b) => (b.onclick = () => {
+      chosen = topics[Number(b.dataset.i)];
+      $("topics").querySelectorAll(".topic").forEach((x) => x.classList.toggle("chosen", x === b));
+    }));
+    $("topics").querySelector(".topic").classList.add("chosen");
+    $("topics").querySelectorAll(".side").forEach((b) => (b.onclick = () => {
+      mode = "solo";
+      topic = chosen;
+      side = b.dataset.s;
+      $("topics").style.display = "none";
+      openCourt(false);
+    }));
+  } catch (e) {
+    $("topics").innerHTML = `<p>お題を取れませんでした: ${e.message}</p>`;
+  }
+};
 $("resume").onclick = () => openCourt(true);
 $("close").onclick = async () => {
   await adjourn();

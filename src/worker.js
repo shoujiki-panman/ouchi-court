@@ -243,6 +243,66 @@ async function investigate(env, { query, mode }) {
   return { kind: "search", caption: v.title || "調査結果", finding: v.finding, sources: v.used === true || v.used === "true" ? sources : [] };
 }
 
+// ひとりで挑戦モードのお題：Wikipedia「最近の出来事」から、子どもが議論できる話題だけを選んで「〇〇に賛成？反対？」にする
+const EVERGREEN = [
+  { motion: "宿題は、なくしたほうがいい？", background: "毎日の宿題、あったほうがいい？ないほうがいい？", source: null },
+  { motion: "給食に、毎日デザートを出すべき？", background: "デザートが毎日あったらうれしいけど…？", source: null },
+  { motion: "小学生もスマホを持っていい？", background: "連絡に便利。でも使いすぎも心配。", source: null },
+];
+async function topics(env) {
+  let items = [];
+  try {
+    const r = await fetch("https://ja.wikipedia.org/w/api.php?action=parse&page=Portal:%E6%9C%80%E8%BF%91%E3%81%AE%E5%87%BA%E6%9D%A5%E4%BA%8B&prop=text&format=json&formatversion=2", {
+      headers: { "user-agent": "ouchi-court/0.1 (family mock trial; https://ouchi-court.panman.workers.dev)" },
+    });
+    const html = (await r.json()).parse?.text ?? "";
+    items = [...html.matchAll(/<li>([\s\S]*?)<\/li>/g)]
+      .map((m) => m[1].replace(/<[^>]+>/g, "").replace(/&#?\w+;/g, " ").trim())
+      .filter((t) => t.length > 20)
+      .slice(0, 25);
+  } catch {}
+  let picked = [];
+  if (items.length) {
+    const v = await within(
+      ask(
+        env,
+        "@cf/mistralai/mistral-small-3.1-24b-instruct",
+        "最近のニュースの一覧から、小学生が賛成・反対で楽しく議論できる話題を3つ選ぶ。人が亡くなった・けがをした・災害・事件・戦争・政治家の争い・お金のもうけ話は選ばない（スポーツ・文化・科学・発明・動物・記録などがよい）。" +
+          "それぞれを、そのニュースから広げた「意見が分かれる」お題にする。ニュースの事実をそのまま聞くのではなく、子どもが自分の考えで賛成・反対を言えるもの。" +
+          "例: 女性が初めて棋士になった → 「スポーツやゲームは、男女いっしょの大会にするべき？」／ノーベル賞の研究 → 「すぐ役に立たない研究にも、お金を使うべき？」。" +
+          "background はニュースを10歳にも分かる言葉で一言（〜だよ。の口調）。" +
+          '出力は JSON だけ: {"topics": [{"motion": "お題（25字以内）", "background": "一言の背景（40字以内）", "news": "元のニュースを短く"}]}',
+        items.join("\n"),
+        500,
+      ),
+      9000,
+    ).catch(() => null);
+    picked = (v?.topics ?? []).slice(0, 3).map((t) => ({ motion: t.motion, background: t.background, source: { title: "Wikipedia「最近の出来事」", url: "https://ja.wikipedia.org/wiki/Portal:最近の出来事", news: t.news } }));
+  }
+  return { topics: [...picked, ...EVERGREEN].slice(0, 5) };
+}
+
+// ひとりで挑戦モードの相手：プレイヤーの主張に弱い所があれば、反対側の弁護人コン太が反論で割り込む
+async function opponent(env, { topic, side, record, last }) {
+  const v = await within(
+    ask(
+      env,
+      "@cf/meta/llama-4-scout-17b-16e-instruct",
+      `お題「${topic}」で、子どもは「${side}」側。あなたは反対側の弁護人コン太。子どもの最新の発言に、理由がない・決めつけ・前と食い違う などの弱い所があれば「異議あり！」で短く反論する。よい理由が言えていたら割り込まない。` +
+        `strength は子どもの発言の説得力（0=理由なし〜3=とても説得力がある）。` +
+        '出力は JSON だけ: {"object": true か false, "line": "異議あり！から始まる40字以内", "strength": 0}',
+      `これまで:\n${record}\n\n子どもの最新の発言: ${last}`,
+    ),
+    6000,
+  ).catch(() => ({ object: false, strength: 1 }));
+  const strength = Math.max(0, Math.min(3, Number(v?.strength) || 0));
+  // 天秤：説得力があればプレイヤー側（マイナス）、なければ相手側に少し
+  const sway = strength >= 2 ? -strength : 1;
+  if (!v?.object || !v?.line) return { id: null, sway };
+  const line = String(v.line).startsWith("異議あり") ? String(v.line) : `異議あり！${v.line}`;
+  return { id: "lawyerD", name: "弁護人コン太", line: line.slice(0, 60), sway };
+}
+
 // 判事の声（24kHz の PCM を base64 で返す）
 async function voice(env, text) {
   const out = await gemini(env, env.JUDGE_TTS_MODEL, {
@@ -281,6 +341,8 @@ export default {
       if (pathname === "/api/verdict") return json(await verdict(env, await request.json()));
       if (pathname === "/api/voice") return json(await voice(env, (await request.json()).text));
       if (pathname === "/api/lawyers") return json(await lawyers(env, await request.json()));
+      if (pathname === "/api/topics") return json(await topics(env));
+      if (pathname === "/api/opponent") return json(await opponent(env, await request.json()));
       if (pathname === "/api/investigate") return json(await investigate(env, await request.json()));
       return json({ error: "not found" }, 404);
     } catch (e) {
