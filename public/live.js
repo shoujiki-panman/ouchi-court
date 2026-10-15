@@ -25,6 +25,9 @@ export class Speaker {
   }
   // WAV（判事の声）は丸ごとデコードして鳴らす
   async playWav(b64) {
+    // 再生が止められている（スマホで音が許可されていない等）なら、待たずに進む
+    if (this.ctx.state !== "running") await this.ctx.resume().catch(() => {});
+    if (this.ctx.state !== "running") return;
     const buf = await this.ctx.decodeAudioData(fromBase64(b64).buffer);
     const src = this.ctx.createBufferSource();
     src.buffer = buf;
@@ -48,6 +51,7 @@ export class Speaker {
     this.next = at + buf.duration;
     this.playing.add(src);
     src.onended = () => this.playing.delete(src);
+    if (this.ctx.state !== "running") return Promise.resolve();
     return new Promise((done) => src.addEventListener("ended", done));
   }
   // 観客の声などの短い音（mp3）。一度読んだら覚えておく

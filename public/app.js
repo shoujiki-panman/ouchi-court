@@ -929,7 +929,7 @@ async function lawyersCheck(statement) {
         ? await api("/api/opponent", { topic: topic?.motion, side, record: recent, last: statement, level: rivalInfo.level })
         : await api("/api/lawyers", { record: recent, last: statement, plaintiff: parties[0], defendant: parties[1] });
     swayBy(r.sway ?? 0);
-    if (mode === "solo" && r.point && statement.length >= 8) soloPoint(r.point, r.why, r.hint, statement, r.strength ?? 0);
+    if (mode === "solo" && r.point && statement.length >= 3) soloPoint(r.point, r.why, r.hint, statement, r.strength ?? 0);
     // 対戦モードでは勝手に「異議あり」を出さない（10/16「勝手に異議アリが発動する」）。異議は子どもが言う・押す
     if (false && mode === "solo" && r.id && r.id !== lastObjector) { // 10/16「すぐ割り込んでくる」→ 相手はコン太のターンでだけ話す
       lastObjector = r.id;
