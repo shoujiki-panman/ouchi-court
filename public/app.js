@@ -745,8 +745,9 @@ async function lawyersCheck(statement) {
     swayBy(r.sway ?? 0);
     // 対戦モードでは勝手に「異議あり」を出さない（10/16「勝手に異議アリが発動する」）。異議は子どもが言う・押す
     if (mode === "solo" && r.id && r.id !== lastObjector) {
-
       lastObjector = r.id;
+      // 話している途中に割り込むとせりふが切れる（10/16）。いまの人が話し終わるまで待つ
+      for (let i = 0; i < 40 && speaker?.busy; i++) await new Promise((w) => setTimeout(w, 250));
       onStage(r.id, r.line, { fresh: true });
       objectionCount++;
       heat(15);
