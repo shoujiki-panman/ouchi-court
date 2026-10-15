@@ -303,10 +303,11 @@ async function opponent(env, { topic, side, record, last }) {
   const v = await within(
     ask(
       env,
-      "@cf/meta/llama-4-scout-17b-16e-instruct",
+      "@cf/mistralai/mistral-small-3.1-24b-instruct",
       `お題「${topic}」で、子どもは「${side}」側。あなたは反対側の弁護人コン太。子どもの最新の発言に、理由がない・決めつけ・前と食い違う などの弱い所があれば「異議あり！」で短く反論する。よい理由が言えていたら割り込まない。` +
-        `strength は子どもの発言の説得力（0=理由なし〜3=とても説得力がある。理由が1つでもちゃんと言えていれば2）。reason は判定の一言（子ども向けに20字以内）。` +
-        '出力は JSON だけ: {"object": true か false, "line": "異議あり！から始まる40字以内", "strength": 0, "reason": "..."}',
+        `argument は、この発言がお題についての意見や理由になっているか（「わかった」「はい」「賛成で戦う」など返事・名前・あいさつだけなら false）。` +
+        `strength は意見の説得力（0=理由なし・「なんとなく」〜3=とても説得力がある。理由が1つでもちゃんと言えていれば2、具体例や比べ方まであれば3）。子どもにはやさしめに採点する。reason は判定の一言（子ども向けに20字以内）。` +
+        '出力は JSON だけ: {"argument": true か false, "object": true か false, "line": "異議あり！から始まる40字以内", "strength": 0, "reason": "..."}',
       `これまで:\n${record}\n\n子どもの最新の発言: ${last}`,
     ),
     6000,
@@ -314,7 +315,8 @@ async function opponent(env, { topic, side, record, last }) {
   const strength = Math.max(0, Math.min(3, Number(v?.strength) || 0));
   // 天秤：説得力があればプレイヤー側（マイナス）、なければ相手側に少し
   const sway = strength >= 2 ? -strength : 1;
-  const point = strength >= 2 ? "player" : "rival";
+  const isArg = v?.argument === true || v?.argument === "true";
+  const point = !isArg ? null : strength >= 2 ? "player" : "rival";
   const why = String(v?.reason ?? (point === "player" ? "理由がしっかりしてる！" : "理由がもう少しほしい")).slice(0, 30);
   if (!v?.object || !v?.line) return { id: null, sway, point, why };
   const line = String(v.line).startsWith("異議あり") ? String(v.line) : `異議あり！${v.line}`;
@@ -359,7 +361,14 @@ export default {
       if (pathname === "/api/verdict") return json(await verdict(env, await request.json()));
       if (pathname === "/api/voice") return json(await voice(env, (await request.json()).text));
       if (pathname === "/api/lawyers") return json(await lawyers(env, await request.json()));
-      if (pathname === "/api/topics") return json(await topics(env));
+      if (pathname === "/api/topics") {
+        // お題づくりは20秒近くかかるので、1時間は作ったものを使い回す（いま話題も数時間単位でしか変わらない）
+        const cached = await env.COURT.get("topics", "json");
+        if (cached) return json(cached);
+        const t = await topics(env);
+        if (t.topics.length > 3) await env.COURT.put("topics", JSON.stringify(t), { expirationTtl: 3600 });
+        return json(t);
+      }
       if (pathname === "/api/opponent") return json(await opponent(env, await request.json()));
       if (pathname === "/api/investigate") return json(await investigate(env, await request.json()));
       return json({ error: "not found" }, 404);

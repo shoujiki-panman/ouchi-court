@@ -261,6 +261,7 @@ async function openCourt(resume = false) {
     tempo = "calm";
     investigations = 0;
     soloScore = { player: 0, rival: 0 };
+    arguing = false;
     $("soloScore").style.display = mode === "solo" ? "flex" : "none";
     if (mode === "solo") showSoloScore();
     $("balP").textContent = mode === "solo" ? `あなた（${side}）` : "原告";
@@ -345,6 +346,10 @@ async function openCourt(resume = false) {
           if (/議論タイム|言い返し|反論はある/.test(speakingTurn + t)) phase("debate");
           const said = speakingTurn + t;
           confirmName(said);
+          if (mode === "solo" && !arguing && /どう思う|議論タイム|ターン/.test(said)) {
+            arguing = true;
+            step("debate");
+          }
           if (/原告/.test(said)) step("plaintiff");
           if (/被告/.test(said) && stepNow >= 1) step("defendant");
           if (/議論タイム|言い返し|反論/.test(said)) step("debate");
@@ -356,7 +361,9 @@ async function openCourt(resume = false) {
             heardTurn = "";
           }
           speakingTurn += t;
-          const id = /ポン子/.test(speakingTurn) ? "lawyerP" : /コン太/.test(speakingTurn) ? "lawyerD" : "bailiff";
+          // 弁護人に切りかえるのは、せりふの最初で名乗ったときだけ（書記官が「コン太、どうぞ」と言っただけでは切りかえない）
+          const head = speakingTurn.slice(0, 16);
+          const id = /ポン子(です|よ|だよ)|弁護人ポン子/.test(head) ? "lawyerP" : /コン太(です|だ|だよ)|弁護人コン太/.test(head) ? "lawyerD" : "bailiff";
           if (who !== id) onStage(id, speakingTurn, { fresh: true });
           else onStage(id, t);
           note(CAST[id].name, t);
@@ -691,11 +698,12 @@ function endTurn() {
 
 // ひとりで挑戦の勝ち負け：議論タイムの発言ごとに判事が採点し、先に3ポイントで勝ち
 let soloScore = { player: 0, rival: 0 };
+let arguing = false;
 function showSoloScore() {
   $("soloScore").innerHTML = `<span class="me">あなた ${soloScore.player}</span><span class="vs">-</span><span class="rival">${soloScore.rival} コン太</span><small>先に3ポイントで勝ち</small>`;
 }
 async function soloPoint(point, why) {
-  if (judged || stepNow < 3) return; // 名前や説明のあいだは数えない（議論タイムから）
+  if (judged || !arguing) return; // 名前や説明のあいだは数えない（書記官が「どう思う？」と聞いてから）
   soloScore[point]++;
   showSoloScore();
   const mine = point === "player";
