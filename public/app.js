@@ -97,6 +97,10 @@ function onStage(id, text, { fresh = false } = {}) {
       setTimeout(() => {
         $("heroImg").src = c.img;
         $("hero").classList.remove("swap");
+        const entry = { lawyerP: "enter-right", lawyerD: "enter-left", judge: "enter-zoom", detective: "enter-spin" }[id] ?? "enter-zoom";
+        $("hero").classList.remove("enter-left", "enter-right", "enter-zoom", "enter-spin");
+        void $("hero").offsetWidth;
+        $("hero").classList.add(entry);
       }, 180);
     }
     $("nameplate").textContent = c.name;
@@ -115,6 +119,32 @@ function onStage(id, text, { fresh = false } = {}) {
   });
 }
 const talk = (on) => $("hero").classList.toggle("talk", on);
+(function lipsync() {
+  const amp = speaker ? speaker.level() : 0;
+  $("hero").style.setProperty("--amp", amp.toFixed(3));
+  document.querySelector(".seat.on")?.style.setProperty("--amp", amp.toFixed(3));
+  requestAnimationFrame(lipsync);
+})();
+function motion(cls, ms = 600) {
+  $("hero").classList.remove(cls);
+  void $("hero").offsetWidth;
+  $("hero").classList.add(cls);
+  setTimeout(() => $("hero").classList.remove(cls), ms);
+}
+function speedLines() {
+  $("speed").classList.remove("on");
+  void $("speed").offsetWidth;
+  $("speed").classList.add("on");
+}
+function jiggleSeats() {
+  document.querySelectorAll(".seat").forEach((el, i) => {
+    setTimeout(() => {
+      el.classList.remove("jiggle");
+      void el.offsetWidth;
+      el.classList.add("jiggle");
+    }, i * 60);
+  });
+}
 
 // 子どもの発言を、法廷を横切って飛ばす。言い分の要（勝手に・わざと・先に 等）は金色に。タップで論破
 const WEAK = /(勝手に|わざと|先に|ずっと|全部|絶対|いつも|だって|ちょっとだけ|知らなかった|してない|やってない|〇〇のせい)/g;
@@ -159,6 +189,8 @@ async function shout(word = "異議あり！") {
   const el = $("shout");
   el.textContent = word;
   el.classList.toggle("gold", word.startsWith("閉廷"));
+  speedLines();
+  motion("lunge", 560);
   el.classList.remove("on");
   void el.offsetWidth;
   el.classList.add("on");
@@ -340,6 +372,7 @@ async function judge(call) {
     closeNote();
     if (voice) await (voice.mimeType?.includes("wav") ? speaker.playWav(voice.audio) : speaker.play(voice.audio));
     talk(false);
+    motion("slam", 520);
     await sfx.gavel(speaker.ctx);
     step("penalty");
     if (v.punishment) await punishmentTime(v.punishment, v.who);
@@ -424,7 +457,9 @@ function score(n, label) {
   points += n * combo * (fever ? 3 : 1);
   $("pts").textContent = points;
   $("combo").textContent = combo > 1 ? `×${combo} COMBO` : "";
-  bigScore(`${label}成功！`, `+${n * combo * (fever ? 3 : 1)}pt${combo > 1 ? `  ×${combo} COMBO` : ""}${fever ? "  FEVER×3" : ""}`, points);
+  const total = points;
+  // 「異議あり！」などの叫びと重ならないよう、少しあとに出す
+  setTimeout(() => bigScore(`${label}成功！`, `+${n * combo * (fever ? 3 : 1)}pt${combo > 1 ? `  ×${combo} COMBO` : ""}${fever ? "  FEVER×3" : ""}`, total), 1000);
   if (speaker) sfx.coin(speaker.ctx);
 }
 // 観客：声（public/crowd/）と、後ろを流れるテロップ
@@ -452,6 +487,7 @@ function crowd(kind) {
 }
 function react(kind = "statement") {
   crowd(kind);
+  jiggleSeats();
   const pool = { statement: ["😮", "🤔", "👀", "😂"], ronpa: ["🔥", "💥", "😱", "⚡"], objection: ["⚡", "😮"], verdict: ["🎉", "👏", "😂", "🎊"] }[kind];
   for (let i = 0; i < (kind === "statement" ? 3 : 8); i++) {
     const e = document.createElement("div");

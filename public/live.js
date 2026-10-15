@@ -15,6 +15,11 @@ const fromBase64 = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 export class Speaker {
   constructor(rate = 24000) {
     this.ctx = new AudioContext({ sampleRate: rate });
+    // 話している声の大きさを測る（キャラの口の動きに使う）
+    this.analyser = this.ctx.createAnalyser();
+    this.analyser.fftSize = 512;
+    this.analyser.connect(this.ctx.destination);
+    this.wave = new Uint8Array(this.analyser.fftSize);
     this.next = 0;
     this.playing = new Set();
   }
@@ -23,7 +28,7 @@ export class Speaker {
     const buf = await this.ctx.decodeAudioData(fromBase64(b64).buffer);
     const src = this.ctx.createBufferSource();
     src.buffer = buf;
-    src.connect(this.ctx.destination);
+    src.connect(this.analyser);
     const at = Math.max(this.ctx.currentTime + 0.03, this.next);
     src.start(at);
     this.next = at + buf.duration;
@@ -37,7 +42,7 @@ export class Speaker {
     for (let i = 0; i < pcm.length; i++) ch[i] = pcm[i] / 32768;
     const src = this.ctx.createBufferSource();
     src.buffer = buf;
-    src.connect(this.ctx.destination);
+    src.connect(this.analyser);
     const at = Math.max(this.ctx.currentTime + 0.03, this.next);
     src.start(at);
     this.next = at + buf.duration;
@@ -56,6 +61,13 @@ export class Speaker {
     g.gain.value = volume;
     src.connect(g).connect(this.ctx.destination);
     src.start();
+  }
+  // いまの声の大きさ（0〜1）
+  level() {
+    this.analyser.getByteTimeDomainData(this.wave);
+    let sum = 0;
+    for (const v of this.wave) sum += ((v - 128) / 128) ** 2;
+    return Math.min(1, Math.sqrt(sum / this.wave.length) * 4);
   }
   stop() {
     for (const s of this.playing) s.stop();

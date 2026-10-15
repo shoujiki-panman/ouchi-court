@@ -36,8 +36,28 @@
     -webkit-mask-image: radial-gradient(circle at 50% 50%, #000 58%, transparent 71%); mask-image: radial-gradient(circle at 50% 50%, #000 58%, transparent 71%); }
   #hero img { width: 100%; height: 100%; object-fit: contain; }
   #hero.swap { opacity: 0; transform: translateX(-30%) scale(.9); }
-  #hero.talk img { animation: bob .3s infinite alternate; }
-  @keyframes bob { to { transform: translateY(-5px) scale(1.01); } }
+  /* キャラの動き：ふだんは息をする／話すと声の大きさで伸び縮み（--amp）／登場・異議・判決の動き */
+  #hero img { transform-origin: 50% 100%; animation: breathe 3.2s ease-in-out infinite; transform: translateY(calc(var(--amp, 0) * -14px)) scaleY(calc(1 + var(--amp, 0) * .07)) scaleX(calc(1 - var(--amp, 0) * .03)); transition: transform .06s; }
+  @keyframes breathe { 50% { translate: 0 -4px; rotate: .6deg; } }
+  #hero.enter-left { animation: enterL .45s cubic-bezier(.2,1.4,.4,1); }
+  #hero.enter-right { animation: enterR .45s cubic-bezier(.2,1.4,.4,1); }
+  #hero.enter-zoom { animation: enterZ .5s cubic-bezier(.2,1.4,.4,1); }
+  #hero.enter-spin { animation: enterS .6s cubic-bezier(.2,1.2,.4,1); }
+  @keyframes enterL { from { translate: -60% 0; opacity: 0; } }
+  @keyframes enterR { from { translate: 60% 0; opacity: 0; } }
+  @keyframes enterZ { from { scale: .3; opacity: 0; } }
+  @keyframes enterS { from { rotate: -360deg; scale: .2; opacity: 0; } }
+  #hero.lunge { animation: lunge .55s ease-out; }
+  @keyframes lunge { 30% { scale: 1.25; translate: 0 -10px; } 60% { scale: 1.12; } }
+  #hero.slam img { animation: slam .5s ease-in; }
+  @keyframes slam { 30% { rotate: -10deg; } 55% { rotate: 6deg; scale: 1.06; } 100% { rotate: 0; } }
+  #speed { position: absolute; inset: -20%; z-index: 1; pointer-events: none; opacity: 0;
+    background: repeating-conic-gradient(from 0deg at 50% 55%, rgba(255,255,255,.18) 0deg 2deg, transparent 2deg 9deg); }
+  #speed.on { animation: speed .7s ease-out; }
+  @keyframes speed { 0% { opacity: .95; rotate: 0deg; } 100% { opacity: 0; rotate: 12deg; } }
+  .seat .ring { transform: scale(calc(1 + var(--amp, 0) * .12)); }
+  .seat.jiggle { animation: jiggle .5s; }
+  @keyframes jiggle { 25% { translate: 0 -6px; rotate: -6deg; } 60% { translate: 0 2px; rotate: 5deg; } }
 
   /* せりふ */
   #nameplate { position: absolute; left: 14px; bottom: 120px; background: var(--pink); color: #fff; padding: 4px 16px; transform: skewX(-12deg); font-size: 1rem; z-index: 3; }
@@ -166,6 +186,7 @@
     <div id="feverClock" class="display"></div>
     <div id="score" class="display">論破 <span id="pts">0</span>pt <span id="combo"></span></div>
     <div id="title"><div><div style="color:var(--muted)">本日の称号</div><div class="badge display" id="badge">論破王</div></div></div>
+    <div id="speed"></div>
     <div id="hero"><img id="heroImg" src="img/judge.jpg" alt=""></div>
     <div id="nameplate" class="display">裁判長タヌキ</div>
     <div id="box">けんかしたら、開廷。下の「開廷する」を押して、マイクを許可してね。</div>
