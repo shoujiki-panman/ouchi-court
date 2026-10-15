@@ -2,7 +2,7 @@
 //   POST /api/token    … Gemini Live の使い捨てトークンを渡す（API キーはブラウザに出さない）
 //   POST /api/verdict  … 判事が判決を考える（判例集＝おやすみ MCP を引き、判決後に記録する）
 //   POST /api/voice    … 判事の声（Gemini TTS。書記官とは別の声）
-// どれも家族の合言葉（x-passphrase）が要る。画面（public/）はだれでも開ける。
+// 合言葉なしで使える（1日の回数に上限）。画面（public/）はだれでも開ける。
 import { mcpClient } from "./mcp.js";
 
 const GEMINI = "https://generativelanguage.googleapis.com/v1beta";
@@ -155,8 +155,24 @@ export default {
   async fetch(request, env) {
     const { pathname } = new URL(request.url);
     if (!pathname.startsWith("/api/")) return env.ASSETS.fetch(request);
+    // 絵づくり（作るときだけ使う・MCP の合言葉つき）: Cloudflare Workers AI の画像モデル（鍵いらず）
+    if (pathname === "/api/art") {
+      if (request.headers.get("authorization") !== `Bearer ${env.MCP_TOKEN}`) return json({ error: "unauthorized" }, 401);
+      const { prompt, model, width, height } = await request.json();
+      const out = await env.AI.run(model ?? "@cf/black-forest-labs/flux-1-schnell", { prompt, steps: 8, ...(width ? { width, height } : {}) });
+      if (out?.image) return json({ image: out.image });
+      return new Response(out, { headers: { "content-type": "image/png" } });
+    }
     if (request.method !== "POST") return json({ error: "POST only" }, 405);
-    if (!env.LOGIN_PASSPHRASE || request.headers.get("x-passphrase") !== env.LOGIN_PASSPHRASE) return json({ error: "合言葉が違います" }, 401);
+    // 合言葉はやめた（10/15「合言葉とか知らない」）。代わりに1日の回数で止める（家族の合言葉があれば上限なし）
+    const family = env.LOGIN_PASSPHRASE && request.headers.get("x-passphrase") === env.LOGIN_PASSPHRASE;
+    if (!family && (pathname === "/api/token" || pathname === "/api/verdict")) {
+      const day = new Date().toISOString().slice(0, 10);
+      const k = `count:${pathname}:${day}`;
+      const n = Number((await env.COURT.get(k)) ?? "0");
+      if (n >= Number(env.DAILY_COURTS ?? "40")) return json({ error: "今日の法廷はもう閉まりました。また明日！" }, 429);
+      await env.COURT.put(k, String(n + 1), { expirationTtl: 60 * 60 * 48 });
+    }
     try {
       if (pathname === "/api/token") return json(await token(env));
       if (pathname === "/api/verdict") return json(await verdict(env, await request.json()));

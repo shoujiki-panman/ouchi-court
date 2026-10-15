@@ -4,103 +4,121 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>おうち裁判</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&display=swap" rel="stylesheet">
 <style>
-  :root { --bg: #14110e; --wood: #3b2a1c; --wood2: #5a4029; --ink: #f5efe6; --muted: #b9ab98; --gold: #e8b65c; --red: #d8432f; --blue: #3f7fd8; --box: rgba(10, 18, 40, .88); --boxline: #9fb6e8; }
-  :root[data-theme="light"] { --bg: #efe7da; --ink: #f5efe6; }
+  :root { --bg: #0b0710; --pink: #ff2d8a; --purple: #8b3dff; --ink: #fff; --muted: #c9b6d8; --gold: #ffd23f; --box: rgba(10, 5, 18, .9); }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font-family: system-ui, -apple-system, "Hiragino Sans", sans-serif; overflow-x: hidden; }
-  main { max-width: 820px; margin: 0 auto; padding: 16px; }
-  header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-  h1 { font-size: 1.5rem; margin: 4px 0; letter-spacing: .05em; }
-  .sub { color: var(--muted); margin: 0; font-size: .9rem; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: system-ui, -apple-system, "Hiragino Sans", sans-serif; overflow-x: hidden; }
+  .display { font-family: "Dela Gothic One", "Hiragino Sans", sans-serif; letter-spacing: .04em; }
+  main { max-width: 900px; margin: 0 auto; padding: 12px 16px 40px; }
+  header { display: flex; align-items: center; gap: 12px; }
+  h1 { margin: 6px 0; font-size: 1.8rem; transform: skewX(-8deg); text-shadow: 3px 3px 0 var(--pink); }
 
-  /* 法廷の舞台 */
-  #stage { position: relative; margin: 12px 0; height: 400px; border-radius: 16px; overflow: hidden;
-    background: linear-gradient(180deg, #6b4a2f 0%, #4a321f 55%, #2c1e13 56%, #3b2a1c 100%); box-shadow: inset 0 0 60px rgba(0,0,0,.6); }
+  /* 円形の法廷 */
+  #stage { position: relative; height: 470px; border-radius: 18px; overflow: hidden; margin: 10px 0; background: #000; isolation: isolate; }
+  #bg { position: absolute; inset: -12%; background: url(img/stage.jpg) center/cover; filter: brightness(.55) saturate(1.3); animation: sweep 24s ease-in-out infinite alternate; z-index: -2; }
+  @keyframes sweep { from { transform: rotate(-3deg) scale(1.05); } to { transform: rotate(3deg) scale(1.12) translateX(-2%); } }
+  #stage::after { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,.75)); z-index: -1; }
   #stage.shake { animation: shake .45s; }
-  @keyframes shake { 20%{transform:translate(-10px,4px)} 40%{transform:translate(9px,-5px)} 60%{transform:translate(-7px,3px)} 80%{transform:translate(5px,-2px)} }
-  #portrait { position: absolute; left: 50%; bottom: 158px; transform: translateX(-50%); font-size: 128px; line-height: 1; filter: drop-shadow(0 6px 10px rgba(0,0,0,.5)); transition: transform .2s; }
-  #portrait.talk { animation: bob .35s infinite alternate; }
-  @keyframes bob { to { transform: translateX(-50%) translateY(-6px); } }
-  #desk { position: absolute; left: 0; right: 0; bottom: 134px; height: 30px; background: var(--wood2); border-top: 3px solid #7a5838; }
-  #nameplate { position: absolute; left: 18px; bottom: 135px; z-index: 2; background: var(--gold); color: #2b1d10; font-weight: 800; padding: 4px 14px; border-radius: 6px 6px 0 0; font-size: .95rem; }
-  #box { position: absolute; left: 12px; right: 12px; bottom: 12px; height: 120px; background: var(--box); border: 3px solid var(--boxline); border-radius: 10px; padding: 12px 16px; font-size: 1.1rem; line-height: 1.6; overflow-y: auto; }
-  #flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+  @keyframes shake { 20%{transform:translate(-12px,5px)} 40%{transform:translate(10px,-6px)} 60%{transform:translate(-8px,3px)} 80%{transform:translate(6px,-2px)} }
+
+  /* 席（輪） */
+  .seat { position: absolute; width: 74px; height: 74px; border-radius: 50%; overflow: hidden; border: 3px solid rgba(255,255,255,.35); background: #000; transition: all .35s; filter: grayscale(.4) brightness(.8); }
+  .seat img { width: 100%; height: 100%; object-fit: cover; object-position: center 18%; }
+  .seat.on { border-color: var(--pink); filter: none; box-shadow: 0 0 22px var(--pink); transform: scale(1.15); }
+  .seat span { position: absolute; bottom: -2px; left: 50%; transform: translateX(-50%); font-size: .6rem; background: var(--pink); padding: 0 4px; border-radius: 4px; white-space: nowrap; }
+
+  /* 話している人（大きく） */
+  #hero { position: absolute; left: 50%; bottom: 120px; width: 300px; height: 300px; transform: translateX(-50%); transition: opacity .25s, transform .35s; mix-blend-mode: lighten; }
+  #hero img { width: 100%; height: 100%; object-fit: contain; }
+  #hero.swap { opacity: 0; transform: translateX(-30%) scale(.9); }
+  #hero.talk img { animation: bob .3s infinite alternate; }
+  @keyframes bob { to { transform: translateY(-5px) scale(1.01); } }
+
+  /* せりふ */
+  #nameplate { position: absolute; left: 14px; bottom: 120px; background: var(--pink); color: #fff; padding: 4px 16px; transform: skewX(-12deg); font-size: 1rem; z-index: 3; }
+  #box { position: absolute; left: 10px; right: 10px; bottom: 10px; height: 108px; background: var(--box); border: 2px solid var(--pink); border-left: 8px solid var(--pink); padding: 12px 16px; font-size: 1.08rem; line-height: 1.6; overflow-y: auto; z-index: 3; }
+
+  /* 飛びかう発言（ノンストップ議論ふう） */
+  .fly { position: absolute; right: -60%; white-space: nowrap; font-size: 1.6rem; color: #fff; text-shadow: 2px 2px 0 #000, 0 0 12px var(--purple); transform: skewX(-12deg); animation: fly 9s linear forwards; cursor: crosshair; z-index: 2; }
+  .fly b { color: var(--gold); text-shadow: 2px 2px 0 #000, 0 0 14px var(--gold); }
+  @keyframes fly { to { right: 110%; } }
+  .fly.hit { animation: shatter .6s forwards; }
+  @keyframes shatter { 0% { filter: none; } 30% { transform: skewX(-12deg) scale(1.3); color: var(--pink); } 100% { transform: skewX(-12deg) scale(1.6) rotate(8deg); opacity: 0; filter: blur(6px); } }
+
+  /* 論破！ 異議あり！ */
+  #shout { position: absolute; left: 50%; top: 38%; transform: translate(-50%,-50%) scale(0); font-size: 4.6rem; color: #fff; padding: 6px 32px; background: linear-gradient(90deg, var(--pink), var(--purple)); transform-origin: center; text-shadow: 4px 4px 0 #000; white-space: nowrap; z-index: 6; pointer-events: none; clip-path: polygon(3% 0, 100% 8%, 97% 100%, 0 90%); }
+  #shout.on { animation: shout 1.3s forwards; }
+  @keyframes shout { 0%{transform:translate(-50%,-50%) scale(3) rotate(-10deg); opacity:0} 15%{transform:translate(-50%,-50%) scale(1) rotate(-6deg); opacity:1} 80%{opacity:1} 100%{transform:translate(-50%,-50%) scale(1.05) rotate(-6deg); opacity:0} }
+  #flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 7; }
   #flash.on { animation: flash .35s; }
-  @keyframes flash { 0%{opacity:.9} 100%{opacity:0} }
+  @keyframes flash { 0%{opacity:.85} 100%{opacity:0} }
 
-  /* 異議あり！ */
-  #shout { position: absolute; left: 50%; top: 42%; transform: translate(-50%,-50%) scale(0) rotate(-6deg); padding: 22px 36px; font-size: 3.2rem; font-weight: 900; color: #fff; background: var(--red);
-    clip-path: polygon(0 18%, 12% 0, 26% 14%, 42% 0, 56% 12%, 72% 0, 86% 16%, 100% 6%, 92% 34%, 100% 52%, 90% 66%, 100% 88%, 80% 82%, 66% 100%, 52% 86%, 36% 100%, 22% 84%, 6% 100%, 10% 74%, 0 58%, 8% 40%);
-    -webkit-text-stroke: 2px #2b0a05; white-space: nowrap; pointer-events: none; }
-  #shout.on { animation: shout 1.4s forwards; }
-  #shout.blue { background: var(--blue); }
-  @keyframes shout { 0%{transform:translate(-50%,-50%) scale(0) rotate(-6deg)} 12%{transform:translate(-50%,-50%) scale(1.15) rotate(-6deg)} 20%{transform:translate(-50%,-50%) scale(1) rotate(-6deg)} 85%{opacity:1} 100%{opacity:0; transform:translate(-50%,-50%) scale(1) rotate(-6deg)} }
-
-  /* 判決のはんこ */
-  #stamp { position: absolute; left: 50%; top: 40%; transform: translate(-50%,-50%) scale(3); opacity: 0; font-size: 4.4rem; font-weight: 900; color: var(--red); border: 8px solid var(--red); border-radius: 14px; padding: 6px 26px; background: rgba(255,255,255,.92); pointer-events: none; letter-spacing: .1em; }
-  #stamp.on { animation: stamp .5s forwards; }
+  /* 投票タイム（スロット） */
+  #vote { position: absolute; inset: 0; display: none; place-items: center; background: rgba(0,0,0,.78); z-index: 5; }
+  #vote.on { display: grid; }
+  #vote h2 { margin: 0 0 12px; font-size: 2.2rem; text-align: center; text-shadow: 3px 3px 0 var(--pink); }
+  .reels { display: flex; gap: 10px; justify-content: center; }
+  .reel { width: 150px; height: 110px; border: 3px solid var(--gold); border-radius: 10px; background: #160a22; overflow: hidden; text-align: center; padding-top: 8px; }
+  .reel small { display: block; color: var(--muted); font-size: .72rem; }
+  .reel .val { font-size: 1.35rem; margin-top: 8px; }
+  .reel .why { font-size: .68rem; color: var(--muted); padding: 2px 6px; }
+  .reel.spin .val { animation: spin .12s steps(2) infinite; }
+  @keyframes spin { 0% { transform: translateY(-40%); opacity: .3; } 100% { transform: translateY(40%); opacity: .3; } }
+  #stamp { position: absolute; left: 50%; top: 42%; transform: translate(-50%,-50%) scale(3); opacity: 0; font-size: 5rem; color: var(--pink); border: 8px solid var(--pink); padding: 0 24px; background: rgba(0,0,0,.85); z-index: 6; pointer-events: none; }
+  #stamp.on { animation: stamp .45s forwards; }
   @keyframes stamp { to { transform: translate(-50%,-50%) scale(1) rotate(-8deg); opacity: 1; } }
 
-  .bench { display: flex; gap: 6px; flex-wrap: wrap; }
-  .cast { background: #241a12; border: 1px solid #4a3622; border-radius: 10px; padding: 4px 10px; font-size: .8rem; color: var(--muted); }
-  .cast.on { color: var(--gold); border-color: var(--gold); }
-  .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 10px 0; }
-  button { font: inherit; font-weight: 700; padding: 12px 20px; border-radius: 999px; border: 0; background: var(--gold); color: #2b1d10; cursor: pointer; }
-  button:disabled { opacity: .35; cursor: default; }
-  button.ghost { background: transparent; color: var(--ink); border: 1px solid #5a4632; }
-  button.objection { background: var(--red); color: #fff; }
-  input { font: inherit; padding: 10px 12px; border-radius: 10px; border: 1px solid #5a4632; background: #241a12; color: var(--ink); width: 10em; }
-  #status { color: var(--muted); margin: 4px 0; min-height: 1.4em; font-size: .9rem; }
-  #evidence { display: flex; gap: 8px; flex-wrap: wrap; }
-  .ev { width: 96px; border: 2px solid var(--gold); border-radius: 8px; overflow: hidden; background: #241a12; font-size: .7rem; text-align: center; }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  button { font: inherit; padding: 13px 22px; border: 0; cursor: pointer; color: #fff; background: var(--pink); transform: skewX(-10deg); box-shadow: 4px 4px 0 #000; }
+  button > span { display: inline-block; transform: skewX(10deg); }
+  button:disabled { opacity: .3; cursor: default; }
+  button.sub { background: #2a1838; }
+  button.big { font-size: 1.25rem; padding: 16px 30px; background: linear-gradient(90deg, var(--pink), var(--purple)); }
+  #status { color: var(--muted); margin: 8px 0; min-height: 1.4em; font-size: .9rem; }
+  #evidence { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .ev { width: 96px; border: 2px solid var(--gold); overflow: hidden; background: #160a22; font-size: .7rem; text-align: center; }
   .ev img { width: 100%; height: 72px; object-fit: cover; display: block; }
   #cam { display: none; margin: 8px 0; }
-  #cam video { width: 100%; max-width: 320px; border-radius: 10px; border: 2px solid var(--gold); }
-  details { margin-top: 12px; color: var(--muted); }
-  #log { font-size: .85rem; line-height: 1.6; }
-  footer { color: var(--muted); font-size: .75rem; margin-top: 18px; }
-  @media (max-width: 520px) { #stage { height: 360px; } #portrait { font-size: 96px; } #shout { font-size: 2.4rem; } #stamp { font-size: 3.2rem; } }
+  #cam video { width: 100%; max-width: 320px; border: 2px solid var(--gold); }
+  details { margin-top: 14px; color: var(--muted); font-size: .85rem; }
+  footer { color: var(--muted); font-size: .72rem; margin-top: 16px; line-height: 1.6; }
+  #pass { display: none; }
+  @media (max-width: 560px) {
+    #stage { height: 430px; } #hero { width: 230px; height: 230px; } .seat { width: 54px; height: 54px; }
+    #shout { font-size: 2.8rem; } #stamp { font-size: 3.2rem; } .reel { width: 100px; } .fly { font-size: 1.2rem; }
+  }
 </style>
 </head>
 <body>
 <main>
-  <header>
-    <h1>⚖️ おうち裁判</h1>
-    <p class="sub">けんかしたら、開廷。言い分は、法廷で。</p>
-  </header>
+  <header><h1 class="display">おうち裁判</h1></header>
 
   <div id="stage">
-    <div id="portrait">🦝</div>
-    <div id="desk"></div>
-    <div id="nameplate">タヌキ判事</div>
-    <div id="box">合言葉を入れて「開廷する」を押してください。マイクを使います。</div>
-    <div id="shout">異議あり！</div>
-    <div id="stamp">和解</div>
+    <div id="bg"></div>
+    <div id="hero"><img id="heroImg" src="img/judge.jpg" alt=""></div>
+    <div id="nameplate" class="display">裁判長タヌキ</div>
+    <div id="box">けんかしたら、開廷。下の「開廷する」を押して、マイクを許可してね。</div>
+    <div id="shout" class="display">論破！</div>
+    <div id="vote"><div><h2 class="display">投票タイム</h2><div class="reels" id="reels"></div></div></div>
+    <div id="stamp" class="display">和解</div>
     <div id="flash"></div>
   </div>
 
-  <div class="bench">
-    <span class="cast" id="c-judge">🦝 タヌキ判事</span>
-    <span class="cast" id="c-bailiff">📜 書記官タヌ吉</span>
-    <span class="cast" id="c-lawyerP">🐼 弁護人ポン子</span>
-    <span class="cast" id="c-lawyerD">🦊 弁護人コン太</span>
-    <span class="cast" id="c-witness">🧒 証言台</span>
-  </div>
-
   <div class="controls">
-    <button id="open">開廷する</button>
-    <button id="objection" class="objection" disabled>異議あり！</button>
-    <button id="evidenceBtn" class="ghost" disabled>📷 証拠品を出す</button>
-    <button id="close" class="ghost" disabled>閉廷</button>
-    <input id="pass" type="password" placeholder="家族の合言葉" autocomplete="current-password">
+    <button id="open" class="big display"><span>開廷する</span></button>
+    <button id="ronpa" class="display" disabled><span>論破！</span></button>
+    <button id="objection" class="sub" disabled><span>異議あり！</span></button>
+    <button id="evidenceBtn" class="sub" disabled><span>📷 証拠品</span></button>
+    <button id="close" class="sub" disabled><span>閉廷</span></button>
+    <input id="pass" type="password">
   </div>
-  <div id="cam"><video id="video" autoplay playsinline muted></video><br><button id="submitEv">この証拠品を提出</button> <button id="cancelEv" class="ghost">やめる</button></div>
+  <div id="cam"><video id="video" autoplay playsinline muted></video><br><button id="submitEv"><span>この証拠品を突きつける</span></button> <button id="cancelEv" class="sub"><span>やめる</span></button></div>
   <div id="status"></div>
   <div id="evidence"></div>
-  <details><summary>法廷記録</summary><div id="log"></div></details>
-
-  <footer>Alexa+ で「アレクサ、裁判して」と言ったときの体験を、ブラウザで再現したものです。法廷ドラマの演出は、どの作品の素材も使わず一から作っています。判例は名前・争点・判決の要約だけをおうちの中に保存します。</footer>
+  <details><summary>法廷記録</summary><pre id="log" style="white-space:pre-wrap"></pre></details>
+  <footer>飛んでくる発言をタップすると「論破！」。言い分がおかしいと思ったら撃ち抜こう。<br>Alexa+ で「アレクサ、裁判して」と言ったときの体験を、ブラウザで再現したものです。キャラも演出もオリジナルです。判例は名前・争点・判決の要約だけを保存します。</footer>
 </main>
 <script type="module" src="app.js"></script>
 </body>

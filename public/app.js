@@ -3,7 +3,7 @@
 import { Live, Speaker, startMic } from "./live.js";
 import { sfx } from "./sfx.js";
 
-const BAILIFF = `あなたは家庭の法廷「おうち裁判」の書記官タヌ吉です。きょうだいや家族の小さなけんかを、法廷ドラマのように楽しく進行します。相手は5〜10歳の子どもと、その親。
+const BAILIFF = `あなたは家庭の法廷「おうち裁判」の書記官タヌ吉です。きょうだいや家族の小さなけんかを、テレビのゲームショーのようにテンション高く、楽しく進行します。相手は5〜10歳の子どもと、その親。
 登場するのは: 原告と被告（子ども）、原告側の弁護人ポン子、被告側の弁護人コン太（どちらもあなたが声色を変えて演じる。必ず「弁護人ポン子です」「弁護人コン太です」と名乗ってから話す）、証人（見ていた親など）、そして判決を出す裁判長タヌキと3人の判事（別の係。call_judge で呼ぶ）。
 段取り:
 1. 開廷を宣言し、原告に名前と、何があったかを聞く。
@@ -14,7 +14,8 @@ const BAILIFF = `あなたは家庭の法廷「おうち裁判」の書記官タ
 6. 「これより、判事たちが合議し、裁判長が判決を言い渡します」と言って call_judge を呼ぶ。判決はあなたが言わない。
 7. 判決のあと、罰や仲直りがちゃんとできたかを楽しく確かめ、「これにて閉廷！」で締める。
 法廷ドラマの決まり:
-- 誰かが「異議あり！」と言ったら、「異議を認めます。どうぞ」と言って、その人の話を聞く。「待った！」も同じ。
+- 誰かが「論破！」と言ったら（または「論破」の知らせが届いたら）、盛り上げながら「おおっと、論破が出ました！」と言い、論破した人に名前と、どこがおかしいと思ったかを聞く。そのあと、論破された側にも言い分を聞く。
+- 誰かが「異議あり！」と言ったら、「異議を認めます。どうぞ」と言って、その人の話を聞く。
 - 証拠品が提出されたら（画像が届いたら）、何が写っているかを一言で言い、だれの言い分に関係するかを確かめる。
 守ること: 次に話す人を必ず名前で呼ぶ。1回に聞くことは1つだけ。1回のせりふは2文まで。子どもが話している途中で口をはさまない。話がそれたらやさしく戻す。どちらかを悪者にしない。恥ずかしい思いをさせない。日本語で話す。`;
 
@@ -35,17 +36,29 @@ const CALL_JUDGE = {
 
 // 舞台に立つ人
 const CAST = {
-  judge: { face: "🦝", name: "裁判長タヌキ" },
-  bailiff: { face: "📜", name: "書記官タヌ吉" },
-  lawyerP: { face: "🐼", name: "弁護人ポン子" },
-  lawyerD: { face: "🦊", name: "弁護人コン太" },
-  witness: { face: "🧒", name: "証言台" },
+  judge: { img: "img/judge.jpg", name: "裁判長タヌキ" },
+  bailiff: { img: "img/bailiff.jpg", name: "書記官タヌ吉" },
+  lawyerP: { img: "img/lawyerP.jpg", name: "弁護人ポン子" },
+  lawyerD: { img: "img/lawyerD.jpg", name: "弁護人コン太" },
+  witness: { img: "img/witness.jpg", name: "証言台" },
 };
+
+// 円形の法廷に席を並べる（裁判長が上、まわりに書記官・弁護人・証言台）
+const SEATS = { judge: [50, 9], bailiff: [16, 20], lawyerP: [84, 20], lawyerD: [8, 50], witness: [92, 50] };
+for (const [id, [x, y]] of Object.entries(SEATS)) {
+  const el = document.createElement("div");
+  el.className = "seat";
+  el.id = `seat-${id}`;
+  el.style.left = `calc(${x}% - 37px)`;
+  el.style.top = `${y}%`;
+  el.innerHTML = `<img src="${CAST[id].img}" alt=""><span>${CAST[id].name}</span>`;
+  document.getElementById("stage").append(el);
+}
 
 const $ = (id) => document.getElementById(id);
 const record = [];
 const evidence = [];
-let live, stopMic, speaker, camStream, judging = false, speakingTurn = "", who = "";
+let live, stopMic, speaker, camStream, judging = false, speakingTurn = "", who = "", heardTurn = "", lastStatement = "";
 
 const pass = () => $("pass").value || localStorage.getItem("ouchi-court-pass") || "";
 const api = async (path, body) => {
@@ -57,24 +70,57 @@ const api = async (path, body) => {
 
 // 舞台：立ち絵・名札・せりふの箱（1文字ずつ）
 let typing = Promise.resolve();
+let scene = 0; // 話し手が変わるたびに増やし、前の人の1文字ずつ表示を打ち切る
 function onStage(id, text, { fresh = false } = {}) {
   const c = CAST[id];
   if (who !== id || fresh) {
+    const changed = who !== id;
     who = id;
-    $("portrait").textContent = c.face;
+    if (changed) {
+      $("hero").classList.add("swap");
+      setTimeout(() => {
+        $("heroImg").src = c.img;
+        $("hero").classList.remove("swap");
+      }, 180);
+    }
     $("nameplate").textContent = c.name;
     $("box").textContent = "";
-    document.querySelectorAll(".cast").forEach((el) => el.classList.toggle("on", el.id === `c-${id}`));
+    scene++;
+    document.querySelectorAll(".seat").forEach((el) => el.classList.toggle("on", el.id === `seat-${id}`));
   }
+  const mine = scene;
   typing = typing.then(async () => {
     for (const ch of text) {
+      if (mine !== scene) return;
       $("box").textContent += ch;
       $("box").scrollTop = $("box").scrollHeight;
       await new Promise((r) => setTimeout(r, 28));
     }
   });
 }
-const talk = (on) => $("portrait").classList.toggle("talk", on);
+const talk = (on) => $("hero").classList.toggle("talk", on);
+
+// 子どもの発言を、法廷を横切って飛ばす。言い分の要（勝手に・わざと・先に 等）は金色に。タップで論破
+const WEAK = /(勝手に|わざと|先に|ずっと|全部|絶対|いつも|だって|ちょっとだけ|知らなかった|してない|やってない|〇〇のせい)/g;
+function flyStatement(text) {
+  const t = text.trim();
+  if (t.length < 4) return;
+  lastStatement = t;
+  const el = document.createElement("div");
+  el.className = "fly display";
+  el.style.top = `${18 + Math.random() * 38}%`;
+  el.innerHTML = t.replace(/[<>&]/g, "").replace(WEAK, "<b>$1</b>");
+  el.onclick = () => ronpa(t, el);
+  $("stage").append(el);
+  setTimeout(() => el.remove(), 9500);
+}
+async function ronpa(statement = lastStatement, el) {
+  if (!live || !statement) return;
+  el?.classList.add("hit");
+  await shout("論破！");
+  live.send({ clientContent: { turns: [{ role: "user", parts: [{ text: `（だれかが「${statement}」という発言に「論破！」と言いました。どこがおかしいと思ったのか、論破した人に名前と理由を聞いてください）` }] }], turnComplete: true } });
+  note("論破", statement);
+}
 const status = (t) => ($("status").textContent = t);
 function note(whoName, text) {
   const last = record[record.length - 1];
@@ -88,7 +134,6 @@ const closeNote = () => record.length && (record[record.length - 1].closed = tru
 async function shout(word = "異議あり！") {
   const el = $("shout");
   el.textContent = word;
-  el.classList.toggle("blue", word.startsWith("待った"));
   el.classList.remove("on");
   void el.offsetWidth;
   el.classList.add("on");
@@ -108,9 +153,11 @@ function stamp(text) {
   $("stamp").classList.remove("on");
   void $("stamp").offsetWidth;
   $("stamp").classList.add("on");
+  setTimeout(() => $("stamp").classList.remove("on"), 4500);
 }
 
 async function openCourt() {
+  judged = false;
   localStorage.setItem("ouchi-court-pass", pass());
   $("open").disabled = true;
   status("開廷の準備中…");
@@ -132,23 +179,32 @@ async function openCourt() {
       },
       on: {
         ready: async () => {
-          status("開廷中：そのまま話しかけてください");
-          stopMic = await startMic((b64) => !judging && live.audio(b64));
           live.send({ clientContent: { turns: [{ role: "user", parts: [{ text: "開廷してください。" }] }], turnComplete: true } });
-          ["close", "objection", "evidenceBtn"].forEach((id) => ($(id).disabled = false));
+          try {
+            stopMic = await startMic((b64) => !judging && live.audio(b64));
+            status("開廷中：そのまま話しかけてください");
+          } catch (e) {
+            status(`マイクが使えません（${e.message}）。ブラウザのマイクの許可を確かめてください。`);
+          }
+          ["close", "objection", "evidenceBtn", "ronpa"].forEach((id) => ($(id).disabled = false));
         },
         audio: (b64) => {
           talk(true);
           speaker.play(b64);
         },
         heard: (t) => {
-          if (/異議あり|いぎあり/.test(t)) shout("異議あり！");
-          else if (/待った|まった！/.test(t)) shout("待った！");
+          if (/論破|ろんぱ/.test(t)) ronpa();
+          else if (/異議あり|いぎあり/.test(t)) shout("異議あり！");
           if (who !== "witness") onStage("witness", "", { fresh: true });
           onStage("witness", t);
           note("証言台", t);
+          heardTurn += t;
         },
         said: (t) => {
+          if (heardTurn) {
+            flyStatement(heardTurn);
+            heardTurn = "";
+          }
           speakingTurn += t;
           const id = /ポン子/.test(speakingTurn) ? "lawyerP" : /コン太/.test(speakingTurn) ? "lawyerD" : "bailiff";
           if (who !== id) onStage(id, speakingTurn, { fresh: true });
@@ -177,8 +233,14 @@ async function openCourt() {
 }
 
 // 判事たちの合議：3人がそれぞれ票を入れ、裁判長タヌキがまとめて言い渡す
+let judged = false;
 async function judge(call) {
   if (call.name !== "call_judge") return;
+  if (judged) {
+    live.toolResponse([{ id: call.id, name: call.name, response: { result: "判決はもう出ている。くり返さず、罰や仲直りを確かめて閉廷する。" } }]);
+    return;
+  }
+  judged = true;
   judging = true;
   closeNote();
   onStage("judge", "ただいま、判事たちが合議中です……", { fresh: true });
@@ -188,10 +250,7 @@ async function judge(call) {
     const names = [call.args?.plaintiff, call.args?.defendant].filter(Boolean);
     const text = `${call.args?.summary ?? ""}\n\n${record.map((r) => `${r.who}: ${r.text}`).join("\n")}`.slice(-6000);
     const v = await api("/api/verdict", { record: text, names, evidence: evidence.map((e) => e.label) });
-    for (const p of v.panel ?? []) {
-      onStage("judge", `\n${p.title}：${p.vote === "draw" ? "和解" : `${p.vote}の勝ち`}（${p.reason}）`);
-      await new Promise((r) => setTimeout(r, 900));
-    }
+    await voteTime(v.panel ?? []);
     const voice = await api("/api/voice", { text: v.speech }).catch(() => null);
     drum.stop();
     await sfx.cymbal(speaker.ctx);
@@ -215,6 +274,29 @@ async function judge(call) {
     judging = false;
     status("開廷中");
   }
+}
+
+// 投票タイム：3人の判事の票をスロットで回して、1つずつ止める
+async function voteTime(panel) {
+  $("reels").innerHTML = panel.map((p, i) => `<div class="reel spin" id="reel${i}"><small>${p.title}</small><div class="val display">？？？</div><div class="why"></div></div>`).join("");
+  $("vote").classList.add("on");
+  const names = [...new Set(panel.map((p) => p.vote))];
+  const spinners = panel.map((_, i) => setInterval(() => {
+    const el = document.querySelector(`#reel${i} .val`);
+    if (el) el.textContent = [...names, "和解"][Math.floor(Math.random() * (names.length + 1))].replace("draw", "和解");
+  }, 90));
+  await new Promise((r) => setTimeout(r, 1600));
+  for (const [i, p] of panel.entries()) {
+    clearInterval(spinners[i]);
+    const reel = $(`reel${i}`);
+    reel.classList.remove("spin");
+    reel.querySelector(".val").textContent = p.vote === "draw" ? "和解" : `${p.vote}の勝ち`;
+    reel.querySelector(".why").textContent = p.reason;
+    await sfx.gavel(speaker.ctx);
+    await new Promise((r) => setTimeout(r, 700));
+  }
+  await new Promise((r) => setTimeout(r, 1500));
+  $("vote").classList.remove("on");
 }
 
 // 証拠品：カメラで撮って Live に見せる（判事にも名前を渡す）
@@ -241,7 +323,7 @@ function submitEvidence() {
   card.innerHTML = `<img src="${dataUrl}" alt=""><div>${label}</div>`;
   $("evidence").append(card);
   hideCamera();
-  shout("くらえ！");
+  shout("これが証拠だ！");
   live.send({ realtimeInput: { video: { data: dataUrl.split(",")[1], mimeType: "image/jpeg" } } });
   live.send({ clientContent: { turns: [{ role: "user", parts: [{ text: `（${label}が提出されました。何が写っているか確かめてください）` }] }], turnComplete: true } });
   note("証拠品", `${label}を提出`);
@@ -253,11 +335,12 @@ function closeCourt() {
   speaker?.stop();
   hideCamera();
   $("open").disabled = false;
-  ["close", "objection", "evidenceBtn"].forEach((id) => ($(id).disabled = true));
+  ["close", "objection", "evidenceBtn", "ronpa"].forEach((id) => ($(id).disabled = true));
 }
 
 $("open").onclick = openCourt;
 $("close").onclick = closeCourt;
+$("ronpa").onclick = () => ronpa();
 $("objection").onclick = () => {
   shout("異議あり！");
   live?.send({ clientContent: { turns: [{ role: "user", parts: [{ text: "異議あり！" }] }], turnComplete: true } });
@@ -267,3 +350,17 @@ $("submitEv").onclick = submitEvidence;
 $("cancelEv").onclick = hideCamera;
 $("pass").value = localStorage.getItem("ouchi-court-pass") ?? "";
 $("pass").oninput = () => localStorage.setItem("ouchi-court-pass", $("pass").value);
+
+// 確かめ用（?debug のときだけ）：声の代わりに文字で発言する
+if (new URLSearchParams(location.search).has("debug")) {
+  window.__court = {
+    say(text) {
+      flyStatement(text);
+      onStage("witness", text, { fresh: true });
+      note("証言台", text);
+      closeNote();
+      live.send({ clientContent: { turns: [{ role: "user", parts: [{ text }] }], turnComplete: true } });
+    },
+    ronpa: () => ronpa(),
+  };
+}

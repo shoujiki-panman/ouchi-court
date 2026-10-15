@@ -7,11 +7,18 @@ compatibility_date = "2026-09-01"
 LIVE_MODEL = "gemini-3.8-live"
 JUDGE_MODEL = "gemini-flash-lite-latest"
 JUDGE_TTS_MODEL = "gemini-3.8-flash-lite-tts"
+# 1日あたりの上限（開廷・判決）
+DAILY_COURTS = "40"
 OYASUMI_MCP_URL = "https://oyasumi-mcp.panman.workers.dev/internal-mcp"
 
 # 合議の判事のうち2人は Cloudflare Workers AI（別の会社のモデル）
 [ai]
 binding = "AI"
+
+# 1日に開ける裁判の数を数える（合言葉なしでだれでも開けるので、使いすぎ止め）
+[[kv_namespaces]]
+binding = "COURT"
+id = "3398b8fe45574066913dc4600c975987"
 
 # 判例集はおやすみ MCP（同じアカウントの Worker なので Service Binding で呼ぶ）
 [[services]]
