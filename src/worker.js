@@ -79,6 +79,7 @@ const parseJson = (raw) => JSON.parse(String(raw).slice(String(raw).indexOf("{")
 
 async function panelVote(env, j, record) {
   const user = `法廷の記録:\n${record}`;
+  if (j.via !== "gemini" && Date.now() < aiOutUntil) return askGemini(env, PANEL_PROMPT(j), user);
   if (j.via === "gemini") {
     const out = await gemini(env, j.model, {
       systemInstruction: { parts: [{ text: PANEL_PROMPT(j) }] },
@@ -95,7 +96,13 @@ async function panelVote(env, j, record) {
     max_tokens: 200,
     temperature: 0.6,
     response_format: { type: "json_object" },
+  }).catch((e) => {
+    // 失敗の理由を残す（無料枠切れ等が見えないまま「採点されない」になった 10/16）
+    console.log(`AI ${j.model} failed: ${e}`);
+    if (/4006|daily free allocation/.test(String(e))) aiOutUntil = Date.now() + 30 * 60 * 1000;
+    return { fallback: true };
   });
+  if (out.fallback) return askGemini(env, PANEL_PROMPT(j), user);
   const r = out.response ?? out.choices?.[0]?.message?.content;
   return typeof r === "string" ? parseJson(r) : r;
 }
@@ -146,7 +153,18 @@ async function verdict(env, { record, names }) {
 }
 
 // Workers AI に JSON で答えさせる小さな道具
+let aiOutUntil = 0;
+async function askGemini(env, system, user) {
+  const out = await gemini(env, "gemini-flash-lite-latest", {
+    systemInstruction: { parts: [{ text: system }] },
+    contents: [{ role: "user", parts: [{ text: user }] }],
+    generationConfig: { responseMimeType: "application/json", temperature: 0.6 },
+  });
+  return parseJson(out.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "{}");
+}
 async function ask(env, model, system, user, maxTokens = 220) {
+  // Workers AI の無料枠（1日1万ニューロン）が切れたら、Gemini の軽いモデルで代わりに答える（10/16 テストで使い切って採点が止まった）
+  if (Date.now() < aiOutUntil) return askGemini(env, system, user);
   const out = await env.AI.run(model, {
     messages: [
       { role: "system", content: system },
@@ -155,7 +173,14 @@ async function ask(env, model, system, user, maxTokens = 220) {
     max_tokens: maxTokens,
     temperature: 0.6,
     response_format: { type: "json_object" },
+  }).catch((e) => {
+    // 失敗の理由を残す（無料枠切れ等が見えないまま「採点されない」になった 10/16）
+    console.log(`AI ${model} failed: ${e}`);
+    // 無料枠切れなら、しばらく Workers AI を呼ばずに最初から Gemini へ（毎回失敗を待つと採点が遅れて落ちる）
+    if (/4006|daily free allocation/.test(String(e))) aiOutUntil = Date.now() + 30 * 60 * 1000;
+    return { fallback: true };
   });
+  if (out.fallback) return askGemini(env, system, user);
   const r = out.response ?? out.choices?.[0]?.message?.content;
   return typeof r === "string" ? parseJson(r) : r;
 }
@@ -179,7 +204,7 @@ async function lawyers(env, { record, last, plaintiff, defendant }) {
         '出力は JSON だけ: {"target": "plaintiff | defendant | none", "lean": "plaintiff | defendant | none", "strength": 1}',
       `これまで:\n${record}\n\nいちばん新しい発言: ${last}`,
     ),
-    6000,
+    9000,
   ).catch(() => ({ target: "none" }));
   // 天秤：この発言がどちらを強くしたか（-3〜3。マイナスは原告側）
   const sway = v?.lean === "plaintiff" ? -Math.min(3, Number(v.strength) || 1) : v?.lean === "defendant" ? Math.min(3, Number(v.strength) || 1) : 0;
@@ -250,6 +275,14 @@ async function investigate(env, { query, mode }) {
 const EVERGREEN = [
   { motion: "宿題は、なくしたほうがいい？", background: "毎日の宿題、あったほうがいい？ないほうがいい？", detail: "学校では毎日のように宿題が出るよね。家で復習できる一方で、遊ぶ時間や家族との時間が減るという声もあるよ。", pro: "遊びや好きなことに使える時間が増える", con: "家で練習しないと、習ったことを忘れちゃう", source: null },
   { motion: "給食に、毎日デザートを出すべき？", background: "デザートが毎日あったらうれしいけど…？", detail: "給食のデザートは、今はときどき出る特別なもの。毎日出たらうれしいけど、栄養やお金のことを考える大人もいるよ。", pro: "毎日の楽しみができて、給食がもっと好きになる", con: "あまいものが多いと体によくないし、特別感がなくなる", source: null },
+  { motion: "ペットにするなら、ねこより犬？", background: "ペットにするなら、犬派？ねこ派？", detail: "犬はいっしょに散歩や遊びができて、ねこは自分のペースでのんびり。どちらも人気のペットだよ。", pro: "犬は散歩でいっしょに元気に遊べる", con: "ねこは静かで、お世話が少なくてすむ", source: null },
+  { motion: "夏休みは、もっと長くするべき？", background: "夏休みがもっと長かったら…？", detail: "夏休みは今だいたい40日くらい。もっと長いと遊べるけど、暑さや勉強のことを心配する声もあるよ。", pro: "旅行や自由研究にじっくり取り組める", con: "長すぎると学校のリズムを忘れちゃう", source: null },
+  { motion: "朝ごはんは、パンよりごはん？", background: "朝はパン派？ごはん派？", detail: "朝ごはんをパンにするか、ごはんにするかは家によってちがうよ。どちらにもいいところがあるんだ。", pro: "ごはんは腹もちがよくて、お昼まで元気", con: "パンはすぐ食べられて、いそがしい朝にぴったり", source: null },
+  { motion: "おこづかいは、お手伝いでもらうべき？", background: "お手伝いしたらおこづかい、あり？なし？", detail: "毎月決まった額をもらう家もあれば、お手伝いをしたらもらえる家もあるよ。どちらがいいか意見が分かれるんだ。", pro: "がんばった分もらえると、やる気が出る", con: "家族のお手伝いは、お金のためじゃない", source: null },
+  { motion: "ゲームは1日1時間までにするべき？", background: "ゲームの時間、決めたほうがいい？", detail: "ゲームは楽しいけど、やりすぎると目や睡眠が心配。時間を決める家も、決めない家もあるよ。", pro: "時間を決めると、宿題や外遊びもできる", con: "1時間だとステージが終わらないこともある", source: null },
+  { motion: "学校の制服は、あったほうがいい？", background: "制服と私服、どっちがいい？", detail: "制服のある学校と、私服で通う学校があるよ。毎朝服を選ばなくていい一方で、好きな服を着たい人もいるんだ。", pro: "毎朝服で迷わないし、みんな同じで安心", con: "好きな服を着たほうが、自分らしくいられる", source: null },
+  { motion: "大人になったら、宇宙旅行に行くべき？", background: "いつか宇宙に行けるとしたら？", detail: "宇宙に旅行する時代が少しずつ近づいているよ。地球を外から見られるけど、まだお金も勇気もたくさんいるんだ。", pro: "地球を宇宙から見るなんて一生の思い出", con: "まだ危ないし、地球にも楽しい場所がたくさんある", source: null },
+  { motion: "ロボットに、お部屋のそうじを全部まかせていい？", background: "おそうじロボットに全部まかせたら？", detail: "床をそうじするロボットはもう多くの家にあるよ。全部まかせたら楽だけど、自分でやる大切さを言う人もいるんだ。", pro: "そうじの時間で、好きなことができる", con: "自分で片づける力がつかなくなる", source: null },
   { motion: "小学生もスマホを持っていい？", background: "連絡に便利。でも使いすぎも心配。", detail: "スマホを持つ小学生が増えているよ。家族とすぐ連絡できて安心な反面、ゲームや動画で使いすぎる心配もあるんだ。", pro: "何かあったときにすぐ家族に連絡できる", con: "ゲームや動画ばかりになって、勉強や睡眠がへる", source: null },
 ];
 // 子どもに出さない話題（AI の判断だけに任せない。10/16 トラに襲われて亡くなったニュースがお題になった）
@@ -290,16 +323,16 @@ async function topics(env) {
       ask(
         env,
         "@cf/mistralai/mistral-small-3.1-24b-instruct",
-        "いま話題のキーワードとニュースの番号つき一覧から、小学生が賛成・反対で楽しく議論できる話題を3つ選ぶ。人が亡くなった・けがをした・災害・事件・裁判・戦争・政治家の争い・芸能人の恋愛や結婚・お金のもうけ話は選ばない（スポーツ・ゲーム・食べ物・動物・科学・発明・記録・季節の行事などがよい）。" +
+        "いま話題のキーワードとニュースの番号つき一覧から、小学生が賛成・反対で楽しく議論できる話題を5つ選ぶ。人が亡くなった・けがをした・災害・事件・裁判・戦争・政治家の争い・芸能人の恋愛や結婚・お金のもうけ話は選ばない（スポーツ・ゲーム・食べ物・動物・科学・発明・記録・季節の行事などがよい）。" +
           "それぞれを、そのニュースから広げた「意見が分かれる」お題にする。ニュースの事実をそのまま聞くのではなく、子どもが自分の考えで賛成・反対を言えるもの。" +
           "例: 女性が初めて棋士になった → 「スポーツやゲームは、男女いっしょの大会にするべき？」／ノーベル賞の研究 → 「すぐ役に立たない研究にも、お金を使うべき？」。" +
           '出力は JSON だけ: {"topics": [{"n": 一覧の番号, "motion": "お題（25字以内）"}]}',
         items.map((t, i) => `${i}. ${t}`).join("\n"),
-        500,
+        800,
       ),
-      12000,
+      20000,
     ).catch(() => null);
-    const chosen = (v?.topics ?? []).filter((t) => t?.motion && items[Number(t.n)] && !UNSAFE.test(t.motion)).slice(0, 3);
+    const chosen = (v?.topics ?? []).filter((t) => t?.motion && items[Number(t.n)] && !UNSAFE.test(t.motion)).slice(0, 5);
     picked = (
       await Promise.all(
         chosen.map(async (t) => {
@@ -321,7 +354,8 @@ async function topics(env) {
       )
     ).filter(Boolean);
   }
-  return { topics: [...picked, ...EVERGREEN].slice(0, 5) };
+  // シャッフルできるように、いま話題と定番を全部返す（10/16「テーマはシャッフルできない？」）
+  return { topics: [...picked, ...EVERGREEN] };
 }
 
 // ひとりで挑戦モードの相手：プレイヤーの主張に弱い所があれば、反対側の弁護人コン太が反論で割り込む
@@ -338,7 +372,7 @@ async function opponent(env, { topic, side, record, last, level = 1 }) {
         '出力は JSON だけ: {"argument": true か false, "object": true か false, "line": "異議あり！から始まる40字以内", "strength": 0, "example": false, "countered": false, "repeat": false, "reason": "...", "hint": "..."}',
       `これまで:\n${record}\n\n子どもの最新の発言: ${last}`,
     ),
-    6000,
+    12000,
   ).catch(() => ({ object: false, strength: 1 }));
   const strength = Math.max(0, Math.min(3, Number(v?.strength) || 0));
   // 天秤：説得力があればプレイヤー側（マイナス）、なければ相手側に少し
@@ -422,7 +456,7 @@ export default {
         const cached = await env.COURT.get("topics", "json");
         if (cached) return json(cached);
         const t = await topics(env);
-        if (t.topics.length > 3) await env.COURT.put("topics", JSON.stringify(t), { expirationTtl: 3600 });
+        if (t.topics.some((x) => x.source)) await env.COURT.put("topics", JSON.stringify(t), { expirationTtl: 3600 });
         return json(t);
       }
       if (pathname === "/api/opponent") return json(await opponent(env, await request.json()));

@@ -264,6 +264,7 @@ async function openCourt(resume = false) {
     arguing = false;
     rounds = 0;
     suddenDeath = false;
+    extraRound = false;
     gameOver = false;
     ronpaArmed = false;
     breakdown = { reason: 0, example: 0, counter: 0, ronpa: 0, repeat: 0, final: 0 };
@@ -624,6 +625,7 @@ async function showTitle() {
 
 // 罰ゲーム：一覧をルーレットで回して、判事の選んだものに止める。時間つきなら数える
 async function punishmentTime(p, who, imgPromise) {
+  $("rTitle").textContent = "罰ゲーム";
   $("rImg").innerHTML = "";
   $("rWho").textContent = who ? `${who} の罰ゲームは……` : "罰ゲームは……";
   $("rItem").classList.remove("done");
@@ -742,7 +744,7 @@ let ronpaArmed = false;
 let arguing = false, rounds = 0, best = { text: "", strength: -1 }, hints = [], soloClock, soloLeft = 180;
 let rivalInfo = { level: 1, wins: 0, losses: 0, draws: 0 };
 function showSoloScore() {
-  const label = suddenDeath ? "サドンデス" : rounds >= 3 ? "試合終了" : rounds === 2 ? "最終ラウンド ×2" : `ラウンド ${rounds + 1}/3`;
+  const label = gameOver ? "試合終了" : extraRound ? "⚡延長戦 ×2" : suddenDeath ? "サドンデス" : rounds >= 3 ? "試合終了" : rounds === 2 ? "最終ラウンド ×2" : `ラウンド ${rounds + 1}/3`;
   $("soloScore").innerHTML = `<span class="me">あなた ${soloScore.player}</span><span class="vs">-</span><span class="rival">${soloScore.rival} コン太</span><small>${label}｜コン太 Lv${rivalInfo.level}</small>`;
 }
 // 採点（10/16「勝敗は結構条件凝っていて欲しい」）
@@ -751,10 +753,41 @@ function showSoloScore() {
 let breakdown = { reason: 0, example: 0, counter: 0, ronpa: 0, repeat: 0, final: 0 };
 let roundWins = { player: 0, rival: 0 };
 let suddenDeath = false;
+// 異変ルーレット：僅差（2点以内）のとき、ときどき判決へのルーレットが狂って延長戦が1ラウンド増える（10/16 本人案）
+let extraRound = false;
+async function glitchRoulette() {
+  $("rTitle").textContent = "運命のルーレット";
+  $("rImg").innerHTML = "";
+  $("count").textContent = "";
+  $("rWho").textContent = "いよいよ判決へ……";
+  $("rItem").classList.remove("done");
+  $("roulette").classList.add("on");
+  let delay = 60;
+  for (let i = 0; i < 18; i++) {
+    $("rItem").textContent = i % 2 ? "⚖️ 判決へ" : "？？？";
+    sfx.tick(speaker.ctx);
+    await new Promise((r) => setTimeout(r, delay));
+    delay *= 1.13;
+  }
+  // 止まりかけて……異変
+  $("stage").classList.add("glitch");
+  $("rWho").textContent = "……！？ ルーレットに異変！";
+  speaker?.clip("crowd/zawa.mp3", 0.6);
+  for (let i = 0; i < 10; i++) {
+    $("rItem").textContent = ["⚖️ 判決へ", "⚡ 延長戦", "⚖️ 判", "⚡ 延"][i % 4];
+    await new Promise((r) => setTimeout(r, 90));
+  }
+  $("rItem").textContent = "⚡ 延長戦 ⚡";
+  $("rItem").classList.add("done");
+  await sfx.objection(speaker.ctx);
+  await new Promise((r) => setTimeout(r, 1600));
+  $("stage").classList.remove("glitch");
+  $("roulette").classList.remove("on");
+}
 let gameOver = false;
 async function soloPoint(r, statement) {
   if (judged || !arguing || !r.isArg) return; // 名前や返事は数えない
-  const last = suddenDeath || rounds === 2; // 最終ラウンド（またはサドンデス）
+  const last = suddenDeath || extraRound || rounds === 2; // 最終ラウンド（またはサドンデス・延長戦）
   const mult = last ? 2 : 1;
   const st = Math.max(0, Math.min(3, r.strength ?? 0));
   const parts = [];
@@ -808,6 +841,12 @@ async function soloPoint(r, statement) {
     suddenDeath = true;
     end = "同点！サドンデスに突入。次の1ラウンドで勝った方の勝ち、得点は2倍。「サドンデス！」と叫んで、最後のラウンドへ。";
     shout("サドンデス！");
+  } else if (rounds === 3 && !extraRound && Math.abs(soloScore.player - soloScore.rival) <= 2 && Math.random() < 0.5) {
+    extraRound = true;
+    await glitchRoulette();
+    shout("延長戦！");
+    showSoloScore();
+    end = "異変発生！判決のルーレットが狂って、延長戦が1ラウンド増えた！「異変発生！延長戦だ！」と叫んで、点差を言ってから延長ラウンド（得点2倍）へ。";
   } else if (rounds >= 3) {
     end = "試合終了！「勝負あり！」とだけ言ってください（判決はこちらで始めます）。";
     shout("勝負あり！");
@@ -891,15 +930,22 @@ async function resultCard(result, v) {
     <div class="rt display">${{ win: "勝訴！", lose: "敗訴…", draw: "引き分け" }[result]}</div>
     <div class="rs display">あなた ${soloScore.player} - ${soloScore.rival} コン太</div>
     <div class="rq">お題：${topic?.motion ?? ""}（あなたは${side}）</div>
-    <div class="rq">内訳：理由 ${breakdown.reason}｜具体例 ${breakdown.example}｜反論に答えた ${breakdown.counter}｜論破 ${breakdown.ronpa}｜使い回し ${breakdown.repeat}｜ラウンド勝ち ${roundWins.player}/${rounds}${suddenDeath ? "｜サドンデス" : ""}</div>
+    <div class="rq">内訳：理由 ${breakdown.reason}｜具体例 ${breakdown.example}｜反論に答えた ${breakdown.counter}｜論破 ${breakdown.ronpa}｜使い回し ${breakdown.repeat}｜ラウンド勝ち ${roundWins.player}/${rounds}${suddenDeath ? "｜サドンデス" : ""}${extraRound ? "｜延長戦" : ""}</div>
     <div class="rb"><b>きょうの名言</b>「${best.text || "（また次回！）"}」</div>
     <div class="rc"><img src="img/lawyerP.png" alt=""><span><b>ポン子の作戦メモ（次はこうすると強いよ）</b>${hints.length ? hints.slice(-2).map((h) => `・${h}`).join("<br>") : "考えを自分の言葉で言えたのがすごい！"}</span></div>
     <div class="rc"><img src="img/lawyerD.png" alt=""><span><b>ライバル コン太</b>${rivalLine}</span></div>
     <div class="rp display">論破力 ${points}pt｜通算 ${rv.wins ?? 0}勝 ${rv.losses ?? 0}敗</div>
-    <button id="resultClose"><span>とじる</span></button></div>`;
+    <div class="rbtns"><button id="shareX" class="display"><span>𝕏 「どっち派？」でシェア</span></button><button id="resultClose" class="sub"><span>とじる</span></button></div></div>`;
   $("result").classList.add("on");
   sfx.fanfare(speaker.ctx);
   $("resultClose").onclick = () => $("result").classList.remove("on");
+  // X でシェア：投稿するかは本人が決める（画面を開くだけ）。名前や名言は入れず、お題と勝ち負けだけ
+  $("shareX").onclick = () => {
+    const outcome = { win: "勝訴！", lose: "敗訴…くやしい！", draw: "引き分け！" }[result];
+    const text = `お題「${topic?.motion ?? ""}」\nわたしは【${side}】派で、AIライバルのコン太と対決して ${soloScore.player}-${soloScore.rival} で${outcome}\n\nあなたはどっち派？ 👍賛成 / 👎反対\n#おうち裁判`;
+    const url = `${location.origin}/?t=${encodeURIComponent(topic?.motion ?? "")}`;
+    window.open(`https://x.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`, "_blank", "noopener");
+  };
   await new Promise((r) => setTimeout(r, 1200));
 }
 
@@ -1092,18 +1138,36 @@ $("solo").onclick = async () => {
   $("topics").style.display = "block";
   try {
     const { topics } = await api("/api/topics");
-    $("topics").innerHTML =
-      `<div class="pick">お題をえらんでね</div>` +
-      topics
+    // いま話題を先に、定番はまぜて。🔀 で次の4つ（10/16「テーマはシャッフルできない？」）
+    const mix = (a) => a.map((t) => [Math.random(), t]).sort((x, y) => x[0] - y[0]).map((x) => x[1]);
+    const pool = [...mix(topics.filter((t) => t.source)), ...mix(topics.filter((t) => !t.source))];
+    // シェアのリンク（?t=お題）から来たら、そのお題を先頭に（ニュースが変わっていても、お題だけで遊べる）
+    const shared = new URLSearchParams(location.search).get("t")?.slice(0, 40);
+    if (shared) {
+      const i = pool.findIndex((t) => t.motion === shared);
+      pool.unshift(i >= 0 ? pool.splice(i, 1)[0] : { motion: shared, background: "シェアされたお題だよ。", detail: "友だちがシェアしたお題。あなたはどっち派？", source: null });
+    }
+    let page = 0, chosen;
+    const draw = () => {
+      const shown = Array.from({ length: Math.min(4, pool.length) }, (_, i) => pool[(page * 4 + i) % pool.length]);
+      chosen = shown[0];
+      $("topicList").innerHTML = shown
         .map((t, i) => `<button class="topic sub" data-i="${i}"><span><b>${t.motion}</b><small>${t.detail ?? t.background}${t.source ? "（いま話題から）" : ""}</small></span></button>`)
-        .join("") +
+        .join("");
+      $("topicList").querySelectorAll(".topic").forEach((b) => (b.onclick = () => {
+        chosen = shown[Number(b.dataset.i)];
+        $("topicList").querySelectorAll(".topic").forEach((x) => x.classList.toggle("chosen", x === b));
+      }));
+      $("topicList").querySelector(".topic").classList.add("chosen");
+    };
+    $("topics").innerHTML =
+      `<div class="pickRow"><span class="pick">お題をえらんでね</span><button id="shuffle" class="mini">🔀 ほかのお題</button></div><div id="topicList"></div>` +
       `<div class="sides"><button class="side" data-s="賛成"><span>👍 賛成で戦う</span></button><button class="side sub" data-s="反対"><span>👎 反対で戦う</span></button></div>`;
-    let chosen = topics[0];
-    $("topics").querySelectorAll(".topic").forEach((b) => (b.onclick = () => {
-      chosen = topics[Number(b.dataset.i)];
-      $("topics").querySelectorAll(".topic").forEach((x) => x.classList.toggle("chosen", x === b));
-    }));
-    $("topics").querySelector(".topic").classList.add("chosen");
+    draw();
+    $("shuffle").onclick = () => {
+      page++;
+      draw();
+    };
     $("topics").querySelectorAll(".side").forEach((b) => (b.onclick = async () => {
       mode = "solo";
       document.body.classList.remove("versus");
@@ -1115,7 +1179,8 @@ $("solo").onclick = async () => {
         rivalInfo.lastResult = rivalInfo.history?.at(-1)?.result;
       } catch {}
       $("topics").style.display = "none";
-      $("topicCard").innerHTML = `<b>お題：${topic.motion}</b><p>${topic.detail ?? topic.background}</p><div class="pc"><span>👍 賛成：${topic.pro ?? "？"}</span><span>👎 反対：${topic.con ?? "？"}</span></div><small>あなたは「${side}」側${topic.source ? `｜話題のもと：<a href="${topic.source.url}" target="_blank">${topic.source.title}</a>` : ""}</small>`;
+      // お題は1行。くわしくは開いたときだけ（PCでスクロールが要った 10/16）
+      $("topicCard").innerHTML = `<details><summary><b>お題：${topic.motion}</b> <small>あなたは「${side}」側・くわしく ▾</small></summary><p>${topic.detail ?? topic.background}</p><div class="pc"><span>👍 賛成：${topic.pro ?? "？"}</span><span>👎 反対：${topic.con ?? "？"}</span></div>${topic.source ? `<small>話題のもと：<a href="${topic.source.url}" target="_blank">${topic.source.title}</a></small>` : ""}</details>`;
       $("topicCard").style.display = "block";
       shout("あなた VS コン太");
       openCourt(false);
@@ -1161,6 +1226,7 @@ if (new URLSearchParams(location.search).has("debug")) {
       live.send({ clientContent: { turns: [{ role: "user", parts: [{ text }] }], turnComplete: true } });
     },
     ronpa: () => ronpa(),
+    glitch: () => glitchRoulette(),
     state: () => ({ myTurn, turnLeft, connected: live?.ws?.readyState, mode, ...dbg }),
   };
 }
