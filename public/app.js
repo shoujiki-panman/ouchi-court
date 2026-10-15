@@ -30,7 +30,7 @@ const MC_STYLE = `司会のしかた（いちばん大事）:
 
 // ひとりで挑戦（お題で議論）のときの段取り
 const SOLO = (topic, side, rv) => `あなたは「おうち裁判 ひとりで挑戦モード」の書記官タヌ吉（司会）。子ども1人が、お題についてライバル弁護士コン太と3分の議論バトルで対決する。
-ルール（開廷のときに短く・はっきり伝える）: 3ラウンド勝負。子どもが意見を言うたびに判事が採点し、理由がしっかりしていれば子どもに1ポイント、弱ければコン太に1ポイント。3ラウンドで多くポイントを取った方の勝ち。
+ルール（開廷のときに短く・はっきり伝える）: 3ラウンド勝負。子どもが意見を言うたびに判事が採点する。理由の強さで最大3点、具体例を出したら+1、コン太の反論に答えたら+1、「論破！」のあとにいい理由を言えたら+2、同じ理由の使い回しは−1。理由が弱いぶんはコン太の点になる。最終ラウンドは得点2倍！同点ならサドンデス。
 ライバル・コン太の戦績: レベル${rv.level}、これまで子どもの${rv.wins}勝${rv.losses}敗${rv.draws ? `${rv.draws}引き分け` : ""}。${rv.wins + rv.losses + rv.draws === 0 ? "今日が初対決。" : rv.lastResult === "win" ? "前回は子どもが勝ったので、コン太はリベンジに燃えている（開廷のときコン太に一言言わせる）。" : rv.lastResult === "lose" ? "前回はコン太が勝ったので、コン太は少し得意げ（開廷のときコン太に一言言わせる）。" : ""}
 お題:「${topic.motion}」
 説明: ${topic.detail ?? topic.background}
@@ -195,6 +195,7 @@ async function ronpa(statement = lastStatement, el) {
   el?.classList.add("hit");
   ronpaCount++;
   ronpaBoost = true;
+  ronpaArmed = true;
   heat(25);
   score(100, "論破");
   react("ronpa");
@@ -262,6 +263,10 @@ async function openCourt(resume = false) {
     soloScore = { player: 0, rival: 0 };
     arguing = false;
     rounds = 0;
+    suddenDeath = false;
+    ronpaArmed = false;
+    breakdown = { reason: 0, example: 0, counter: 0, ronpa: 0, repeat: 0, final: 0 };
+    roundWins = { player: 0, rival: 0 };
     best = { text: "", strength: -1 };
     hints = [];
     clearInterval(soloClock);
@@ -290,7 +295,7 @@ async function openCourt(resume = false) {
     speaker = new Speaker();
     onStage("judge", "これより、おうち裁判を開廷します。", { fresh: true });
     if (!resume) await sfx.fanfare(speaker.ctx);
-    beat = sfx.beat(speaker.ctx);
+    beat = sfx.bgm(); // 魔王魂のBGM（落ち着き→議論→白熱）
     if (!resume) {
       heatVal = 0;
       points = 0;
@@ -354,6 +359,7 @@ async function openCourt(resume = false) {
           if (mode === "solo" && !arguing && /お題/.test(said)) step("topic");
           if (mode === "solo" && !arguing && /ラウンド1|どう思う/.test(said)) {
             arguing = true;
+            beat?.level(0.5);
             step("r1");
             startSoloClock();
           }
@@ -434,7 +440,8 @@ async function judge(call) {
       clearInterval(soloClock);
       $("feverClock").textContent = "";
       soloResult = soloScore.player > soloScore.rival ? "win" : soloScore.player < soloScore.rival ? "lose" : "draw";
-      v.stamp = { win: "勝訴！", lose: "敗訴…", draw: "引き分け" }[soloResult];
+      const perfect = soloResult === "win" && roundWins.player >= rounds && rounds >= 3;
+      v.stamp = perfect ? "完全論破！" : { win: "勝訴！", lose: "敗訴…", draw: "引き分け" }[soloResult];
       v.who = soloResult === "win" ? "コン太" : soloResult === "lose" ? `${parties[0] ?? "あなた"}` : "二人";
       // 罰ゲームの絵は、判決を読んでいるあいだに作っておく（負けた方がやる。子どもが負けたら書記官がお手本）
       penaltyImg = api("/api/penalty-image", { id: v.punishment?.id, who: soloResult === "win" ? "rival" : "clerk" }).catch(() => null);
@@ -480,7 +487,7 @@ function heat(add) {
   heatVal = Math.max(0, Math.min(100, heatVal + add));
   // 音楽は白熱してから（最初は無音で、ゆっくり話せるように 10/16）
   beat?.faster(80 + heatVal * 0.9);
-  beat?.level(heatVal < 30 ? 0 : heatVal < 60 ? 0.5 : 1);
+  beat?.level(heatVal >= 60 ? 1 : heatVal >= 30 || arguing ? 0.5 : 0);
   const next = heatVal >= 60 ? "hot" : heatVal <= 25 ? "calm" : tempo;
   if (next !== tempo && live) {
     tempo = next;
@@ -722,26 +729,80 @@ function endTurn() {
 
 // ひとりで挑戦の勝ち負け：議論タイムの発言ごとに判事が採点し、先に3ポイントで勝ち
 let soloScore = { player: 0, rival: 0 };
+let ronpaArmed = false;
 let arguing = false, rounds = 0, best = { text: "", strength: -1 }, hints = [], soloClock, soloLeft = 180;
 let rivalInfo = { level: 1, wins: 0, losses: 0, draws: 0 };
 function showSoloScore() {
-  $("soloScore").innerHTML = `<span class="me">あなた ${soloScore.player}</span><span class="vs">-</span><span class="rival">${soloScore.rival} コン太</span><small>ラウンド ${Math.min(rounds + 1, 3)}/3｜コン太 Lv${rivalInfo.level}</small>`;
+  const label = suddenDeath ? "サドンデス" : rounds >= 3 ? "試合終了" : rounds === 2 ? "最終ラウンド ×2" : `ラウンド ${rounds + 1}/3`;
+  $("soloScore").innerHTML = `<span class="me">あなた ${soloScore.player}</span><span class="vs">-</span><span class="rival">${soloScore.rival} コン太</span><small>${label}｜コン太 Lv${rivalInfo.level}</small>`;
 }
-async function soloPoint(point, why, hint, statement, strength) {
-  if (judged || !arguing || rounds >= 3) return; // 名前や説明のあいだは数えない（書記官が「どう思う？」と聞いてから）
-  soloScore[point]++;
+// 採点（10/16「勝敗は結構条件凝っていて欲しい」）
+//  理由の強さ 0〜3（コン太は 3−強さ）／具体例 +1／コン太の反論に答えた +1／論破のあとに理由 +2／同じ理由の使い回し −1
+//  最終ラウンドは2倍。3ラウンドとも上回れば「完全論破」。同点ならサドンデス（もう1ラウンド）
+let breakdown = { reason: 0, example: 0, counter: 0, ronpa: 0, repeat: 0, final: 0 };
+let roundWins = { player: 0, rival: 0 };
+let suddenDeath = false;
+async function soloPoint(r, statement) {
+  if (judged || !arguing || !r.isArg) return; // 名前や返事は数えない
+  const last = suddenDeath || rounds === 2; // 最終ラウンド（またはサドンデス）
+  const mult = last ? 2 : 1;
+  const st = Math.max(0, Math.min(3, r.strength ?? 0));
+  const parts = [];
+  let me = st, rival = 3 - st;
+  parts.push(`理由+${st}`);
+  breakdown.reason += st * mult;
+  if (r.example) {
+    me += 1;
+    parts.push("具体例+1");
+    breakdown.example += mult;
+  }
+  if (r.countered) {
+    me += 1;
+    parts.push("反論に答えた+1");
+    breakdown.counter += mult;
+  }
+  if (ronpaArmed && st >= 2) {
+    me += 2;
+    parts.push("論破成功+2");
+    breakdown.ronpa += 2 * mult;
+  }
+  ronpaArmed = false;
+  if (r.repeat) {
+    me -= 1;
+    parts.push("使い回し−1");
+    breakdown.repeat -= mult;
+  }
+  me = Math.max(0, me) * mult;
+  rival = rival * mult;
+  if (last) {
+    parts.push("最終ラウンド×2");
+    breakdown.final += 1;
+  }
+  soloScore.player += me;
+  soloScore.rival += rival;
   rounds++;
-  if (strength > best.strength) best = { text: statement, strength };
-  if (hint) hints.push(hint);
-  step(rounds < 3 ? `r${rounds + 1}` : "verdict");
+  if (me > rival) roundWins.player++;
+  else if (rival > me) roundWins.rival++;
+  if (st > best.strength) best = { text: statement, strength: st };
+  if (r.hint) hints.push(r.hint);
   showSoloScore();
-  const mine = point === "player";
-  shout(mine ? "あなたのポイント！" : "コン太のポイント…");
-  popAt(why, mine ? 30 : 70, 30);
+  const mine = me >= rival;
+  shout(mine ? `+${me}pt！` : `コン太 +${rival}pt…`);
+  popAt(parts.join("  "), 50, 30);
   speaker?.clip(mine ? "crowd/oo.mp3" : "crowd/ee.mp3", 0.5);
-  if (mine) score(100, "主張");
-  const done = rounds >= 3 || soloScore.player >= 2 || soloScore.rival >= 2 && rounds >= 3;
-  live?.send({ clientContent: { turns: [{ role: "user", parts: [{ text: `（ラウンド${rounds}の採点: ${mine ? "子ども" : "コン太"}に1ポイント。理由「${why}」。いま あなた${soloScore.player} - ${soloScore.rival}コン太。${rounds >= 3 ? "3ラウンド終了！「勝負あり！」と言って、すぐ call_judge を呼んでください。" : `実況は1文だけで、すぐコン太の反論 → 「ラウンド${rounds + 1}！」へ。テンポよく、白熱させて。`}）` }] }], turnComplete: true } });
+  if (mine) score(me * 10, "主張");
+  heat(mine ? 20 : 12);
+  // 終わりの判定：3ラウンド（同点ならサドンデス）
+  let end = "";
+  if (rounds >= 3 && !suddenDeath && soloScore.player === soloScore.rival) {
+    suddenDeath = true;
+    end = "同点！サドンデスに突入。次の1ラウンドで勝った方の勝ち、得点は2倍。「サドンデス！」と叫んで、最後のラウンドへ。";
+    shout("サドンデス！");
+  } else if (rounds >= 3) {
+    end = "試合終了！「勝負あり！」と言って、すぐ call_judge を呼んでください。";
+  }
+  step(end.startsWith("試合終了") ? "verdict" : `r${Math.min(rounds + 1, 3)}`);
+  live?.send({ clientContent: { turns: [{ role: "user", parts: [{ text: `（ラウンド${rounds}の採点: 子ども+${me}（${parts.join("・")}）、コン太+${rival}。合計 あなた${soloScore.player} - ${soloScore.rival}コン太。理由「${r.why}」。${end || `実況は1文だけで、すぐコン太の反論 → 「ラウンド${rounds + 1}！」${rounds + 1 === 3 ? "（最終ラウンド！得点2倍と言って煽る）" : ""}へ。テンポよく、白熱させて。`}）` }] }], turnComplete: true } });
 }
 // 3分の持ち時間（議論が始まってから）。切れたら勝負あり
 function startSoloClock() {
@@ -812,6 +873,7 @@ async function resultCard(result, v) {
     <div class="rt display">${{ win: "勝訴！", lose: "敗訴…", draw: "引き分け" }[result]}</div>
     <div class="rs display">あなた ${soloScore.player} - ${soloScore.rival} コン太</div>
     <div class="rq">お題：${topic?.motion ?? ""}（あなたは${side}）</div>
+    <div class="rq">内訳：理由 ${breakdown.reason}｜具体例 ${breakdown.example}｜反論に答えた ${breakdown.counter}｜論破 ${breakdown.ronpa}｜使い回し ${breakdown.repeat}｜ラウンド勝ち ${roundWins.player}/${rounds}${suddenDeath ? "｜サドンデス" : ""}</div>
     <div class="rb"><b>きょうの名言</b>「${best.text || "（また次回！）"}」</div>
     <div class="rc"><img src="img/lawyerP.png" alt=""><span><b>ポン子の作戦メモ（次はこうすると強いよ）</b>${hints.length ? hints.slice(-2).map((h) => `・${h}`).join("<br>") : "考えを自分の言葉で言えたのがすごい！"}</span></div>
     <div class="rc"><img src="img/lawyerD.png" alt=""><span><b>ライバル コン太</b>${rivalLine}</span></div>
@@ -926,7 +988,7 @@ async function lawyersCheck(statement) {
         ? await api("/api/opponent", { topic: topic?.motion, side, record: recent, last: statement, level: rivalInfo.level })
         : await api("/api/lawyers", { record: recent, last: statement, plaintiff: parties[0], defendant: parties[1] });
     swayBy(r.sway ?? 0);
-    if (mode === "solo" && r.point && statement.length >= 3) soloPoint(r.point, r.why, r.hint, statement, r.strength ?? 0);
+    if (mode === "solo" && statement.length >= 3) soloPoint(r, statement);
     // 対戦モードでは勝手に「異議あり」を出さない（10/16「勝手に異議アリが発動する」）。異議は子どもが言う・押す
     if (false && mode === "solo" && r.id && r.id !== lastObjector) { // 10/16「すぐ割り込んでくる」→ 相手はコン太のターンでだけ話す
       lastObjector = r.id;

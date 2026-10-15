@@ -145,6 +145,51 @@ export const sfx = {
       o.stop(t + i * 0.07 + 0.14);
     });
   },
+  // 法廷のBGM（魔王魂の曲）：盛り上がりで 落ち着き→議論→白熱 を切りかえる。人が話す番は小さく（マイクが拾うと返事が止まる）
+  bgm() {
+    const tracks = { calm: new Audio("bgm/calm.mp3"), debate: new Audio("bgm/debate.mp3"), hot: new Audio("bgm/hot.mp3") };
+    for (const a of Object.values(tracks)) {
+      a.loop = true;
+      a.volume = 0;
+      a.preload = "auto";
+    }
+    let now = null, loud = false, on = true, timer;
+    const target = () => (loud ? 0.32 : 0.08);
+    const fade = () => {
+      clearInterval(timer);
+      timer = setInterval(() => {
+        let done = true;
+        for (const [k, a] of Object.entries(tracks)) {
+          const goal = on && k === now ? target() : 0;
+          const v = a.volume + Math.sign(goal - a.volume) * 0.02;
+          a.volume = Math.abs(goal - a.volume) < 0.02 ? goal : Math.min(1, Math.max(0, v));
+          if (a.volume === 0 && k !== now && !a.paused) a.pause();
+          if (a.volume !== goal) done = false;
+        }
+        if (done) clearInterval(timer);
+      }, 60);
+    };
+    const play = (k) => {
+      if (k === now) return;
+      now = k;
+      tracks[k].play().catch(() => {});
+      fade();
+    };
+    play("calm");
+    return {
+      stop: () => {
+        on = false;
+        fade();
+      },
+      faster: () => {},
+      level: (v) => play(v >= 1 ? "hot" : v >= 0.5 ? "debate" : "calm"),
+      loud: (yes) => {
+        loud = yes;
+        fade();
+      },
+      get track() { return now; },
+    };
+  },
   // ルーレットの「カッ」
   tick(ctx) {
     hit(ctx, ctx.currentTime + 0.01, { freq: 2500, type: "bandpass", decay: 0.03, gain: 0.35 });
