@@ -29,3 +29,5 @@ service = "oyasumi-mcp"
 [assets]
 directory = "public"
 binding = "ASSETS"
+# 余計な文字がついたURL（リンクの後ろに文がくっついた等）でも、トップの画面を出す（10/16 404になった）
+not_found_handling = "single-page-application"
