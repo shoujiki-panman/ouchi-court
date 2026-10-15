@@ -88,6 +88,13 @@
   #stage.fever { box-shadow: 0 0 0 4px var(--pink), 0 0 40px var(--pink); animation: feverPulse .45s infinite alternate; }
   @keyframes feverPulse { to { box-shadow: 0 0 0 4px var(--gold), 0 0 60px var(--gold); } }
   #feverClock { position: absolute; left: 14px; top: 30px; z-index: 4; font-size: 1.3rem; color: var(--gold); text-shadow: 2px 2px 0 #000; }
+  /* いまの状況（段取りの進み具合） */
+  #steps { display: flex; gap: 4px; flex-wrap: wrap; margin: 6px 0; }
+  #steps span { font-size: .78rem; padding: 4px 10px; background: #1d1028; color: var(--muted); transform: skewX(-10deg); }
+  #steps span.done { background: #3a1f4d; color: #fff; }
+  #steps span.now { background: var(--pink); color: #fff; box-shadow: 0 0 12px var(--pink); }
+  #paused { position: absolute; inset: 0; display: none; place-items: center; background: rgba(0,0,0,.7); z-index: 9; font-size: 2.6rem; text-shadow: 3px 3px 0 var(--pink); }
+  #paused.on { display: grid; }
   /* 点数の大きい表示 */
   .bigScore { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); text-align: center; z-index: 8; pointer-events: none; animation: bigScore 2.2s forwards; text-shadow: 3px 3px 0 #000; }
   .bigScore div:first-child { font-size: 1.6rem; color: #fff; }
@@ -152,6 +159,7 @@
 <main>
   <header><h1 class="display">おうち裁判</h1></header>
 
+  <div id="steps"></div>
   <div id="stage">
     <div id="bg"></div>
     <div id="heat"><div id="heatBar"></div></div>
@@ -166,6 +174,7 @@
     <div id="roulette"><div><h2 class="display">罰ゲーム</h2><div id="rWho"></div><div id="rItem" class="display">？？？</div><div id="count" class="display"></div></div></div>
     <div id="stamp" class="display">和解</div>
     <div id="banner" class="display"></div>
+    <div id="paused" class="display">⏸ 一時停止中</div>
     <div id="flash"></div>
   </div>
 
@@ -175,6 +184,7 @@
     <button id="objection" class="sub" disabled><span>異議あり！</span></button>
     <button id="evidenceBtn" class="sub" disabled><span>📷 証拠品</span></button>
     <button id="verdictBtn" class="sub" disabled><span>⚖️ 判決へ</span></button>
+    <button id="pauseBtn" class="sub" disabled><span>⏸ 一時停止</span></button>
     <button id="close" class="sub" disabled><span>閉廷</span></button>
     <button id="resume" class="big display"><span>再開する</span></button>
     <input id="pass" type="password">

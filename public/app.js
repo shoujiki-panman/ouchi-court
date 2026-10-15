@@ -122,6 +122,7 @@ function flyStatement(text) {
   const t = text.trim();
   if (t.length < 4) return;
   lastStatement = t;
+  pickName(t);
   heat(8);
   react("statement");
   lawyersCheck(t);
@@ -182,6 +183,13 @@ function stamp(text) {
 
 async function openCourt(resume = false) {
   userClosed = false;
+  if (!resume) {
+    stepNow = -1;
+    step("open");
+    paused = false;
+    $("paused").classList.remove("on");
+  }
+  if (!resume) parties.length = 0;
   if (!resume) shownPhase = "";
   $("resume").style.display = "none";
   if (resume) {
@@ -223,14 +231,15 @@ async function openCourt(resume = false) {
           const restart = resume && record.length ? `接続が切れたので再開します。これまでの法廷記録:\n${record.map((r) => `${r.who}: ${r.text}`).join("\n").slice(-3000)}\n続きから進めてください（開廷の宣言はしない）。${judged ? "判決はもう出ています。" : ""}` : "開廷してください。";
           live.send({ clientContent: { turns: [{ role: "user", parts: [{ text: restart }] }], turnComplete: true } });
           try {
-            stopMic = await startMic((b64) => !judging && live.audio(b64));
+            stopMic = await startMic((b64) => !judging && !paused && live.audio(b64));
             status("開廷中：そのまま話しかけてください");
           } catch (e) {
             status(`マイクが使えません（${e.message}）。ブラウザのマイクの許可を確かめてください。`);
           }
-          ["close", "objection", "evidenceBtn", "ronpa", "verdictBtn"].forEach((id) => ($(id).disabled = false));
+          ["close", "objection", "evidenceBtn", "ronpa", "verdictBtn", "pauseBtn"].forEach((id) => ($(id).disabled = false));
         },
         audio: (b64) => {
+          if (paused) return;
           talk(true);
           beat?.loud(true);
           speaker.play(b64);
@@ -252,6 +261,12 @@ async function openCourt(resume = false) {
         said: (t) => {
           if (/これにて閉廷|閉廷します|閉廷！/.test(speakingTurn + t)) adjourn();
           if (/議論タイム|言い返し|反論はある/.test(speakingTurn + t)) phase("debate");
+          const said = speakingTurn + t;
+          if (/原告/.test(said)) step("plaintiff");
+          if (/被告/.test(said) && stepNow >= 1) step("defendant");
+          if (/議論タイム|言い返し|反論/.test(said)) step("debate");
+          if (/証拠/.test(said) && stepNow >= 3) step("evidence");
+          if (/最後に|言っておきたい|言い残し/.test(said)) step("last");
           if (/証拠品タイム|証拠(品|になる|はある|を見せ)/.test(speakingTurn + t)) phase("evidence");
           if (heardTurn) {
             flyStatement(heardTurn);
@@ -301,6 +316,7 @@ async function judge(call) {
     return;
   }
   judged = true;
+  step("verdict");
   judging = true;
   closeNote();
   onStage("judge", "ただいま、判事たちが合議中です……", { fresh: true });
@@ -325,6 +341,7 @@ async function judge(call) {
     if (voice) await (voice.mimeType?.includes("wav") ? speaker.playWav(voice.audio) : speaker.play(voice.audio));
     talk(false);
     await sfx.gavel(speaker.ctx);
+    step("penalty");
     if (v.punishment) await punishmentTime(v.punishment, v.who);
     live.toolResponse([
       { id: call.id, name: call.name, response: { result: `裁判長がたった今、判決を読み上げた（書記官は判決をくり返さないこと）。罰ゲーム: ${v.who ?? ""}「${v.punishment?.text ?? v.sentence}」（画面でもう発表して、やり終えた）。書記官は、罰や仲直りが今できているかを名前を呼んで楽しく確かめてから「これにて閉廷！」と締める。` } },
@@ -485,6 +502,35 @@ async function punishmentTime(p, who) {
   $("roulette").classList.remove("on");
 }
 
+// いまの状況：段取りのどこにいるか
+const STEPS = [["open", "開廷"], ["plaintiff", "原告"], ["defendant", "被告"], ["debate", "議論"], ["evidence", "証拠品"], ["last", "最後のひとこと"], ["verdict", "判決"], ["penalty", "罰ゲーム"], ["closed", "閉廷"]];
+let stepNow = -1;
+function step(id) {
+  const i = STEPS.findIndex(([k]) => k === id);
+  if (i < stepNow) return; // 戻らない
+  stepNow = i;
+  $("steps").innerHTML = STEPS.map(([, label], n) => `<span class="${n < i ? "done" : n === i ? "now" : ""}">${label}</span>`).join("");
+}
+step("open");
+
+// 一時停止と再開：止めている間はマイクを送らず、声と音楽を止める
+let paused = false;
+function togglePause() {
+  if (!live) return;
+  paused = !paused;
+  $("paused").classList.toggle("on", paused);
+  $("pauseBtn").querySelector("span").textContent = paused ? "▶ 再開" : "⏸ 一時停止";
+  if (paused) {
+    speaker?.stop();
+    beat?.loud(false);
+    talk(false);
+    status("一時停止中");
+  } else {
+    status("開廷中");
+    live.send({ clientContent: { turns: [{ role: "user", parts: [{ text: "（一時停止から再開しました。今どこまで進んでいたかを一言で言って、続きから進めてください）" }] }], turnComplete: true } });
+  }
+}
+
 // 段の掲示：議論タイム・証拠品タイム
 let shownPhase = "";
 function phase(kind) {
@@ -508,6 +554,7 @@ let adjourned = false;
 async function adjourn() {
   if (adjourned) return;
   adjourned = true;
+  step("closed");
   shout("閉廷！");
   for (let i = 0; i < 60; i++) {
     const c = document.createElement("div");
@@ -588,12 +635,18 @@ function showEvidence(card) {
 
 // 弁護人が自分から割り込む：子どもの発言のたびに、2人の弁護人（別々の AI）が「異議あり」をするか決める
 let lastObjector = "", lawyerBusy = false;
+// 原告・被告の名前：最初の2つの子どもの発言の「〇〇です」「ぼくは〇〇」から拾う
+const parties = [];
+function pickName(text) {
+  const m = text.match(/(?:わたしは|私は|ぼくは|僕は|おれは|俺は)?\s*([ァ-ヶーぁ-ん一-龠A-Za-z]{1,8}?)(?:です|だよ|。|、|！)/);
+  if (m && parties.length < 2 && !parties.includes(m[1]) && !/^(うん|はい|いいえ|でも|だって)$/.test(m[1])) parties.push(m[1]);
+}
 async function lawyersCheck(statement) {
   if (!live || judging || lawyerBusy) return;
   lawyerBusy = true;
   try {
     const recent = record.slice(-8).map((r) => `${r.who}: ${r.text}`).join("\n");
-    const r = await api("/api/lawyers", { record: recent, last: statement });
+    const r = await api("/api/lawyers", { record: recent, last: statement, plaintiff: parties[0], defendant: parties[1] });
     if (r.id && r.id !== lastObjector) {
       lastObjector = r.id;
       onStage(r.id, r.line, { fresh: true });
@@ -649,7 +702,7 @@ function closeCourt() {
   speaker?.stop();
   hideCamera();
   $("open").disabled = false;
-  ["close", "objection", "evidenceBtn", "ronpa", "verdictBtn"].forEach((id) => ($(id).disabled = true));
+  ["close", "objection", "evidenceBtn", "ronpa", "verdictBtn", "pauseBtn"].forEach((id) => ($(id).disabled = true));
 }
 
 $("open").onclick = () => openCourt(false);
@@ -659,6 +712,7 @@ $("close").onclick = async () => {
   setTimeout(closeCourt, 1500);
 };
 $("ronpa").onclick = () => ronpa();
+$("pauseBtn").onclick = togglePause;
 $("verdictBtn").onclick = () => {
   if (!live || judged) return;
   shout("判決を求む！");

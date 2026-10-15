@@ -164,25 +164,38 @@ const LAWYERS = [
   { id: "lawyerD", name: "弁護人コン太", side: "被告", model: "@cf/meta/llama-4-scout-17b-16e-instruct" },
 ];
 async function lawyers(env, { record, last, plaintiff, defendant }) {
-  const votes = await Promise.all(
-    LAWYERS.map((l) =>
-      within(
-        ask(
-          env,
-          l.model,
-          `あなたは家庭の法廷の${l.name}。${l.side}（${l.side === "原告" ? plaintiff ?? "原告" : defendant ?? "被告"}）の味方。` +
-            "いちばん新しい発言が、あなたの依頼人に不利・決めつけ・言いすぎ・前と食い違う なら、子どもにも分かる言葉で「異議あり！」と割り込む。依頼人自身の発言や、問題ない発言には割り込まない。" +
-            '出力は JSON だけ: {"object": true か false, "line": "異議あり！から始まる40字以内のひとこと"}',
-          `これまで:\n${record}\n\nいちばん新しい発言: ${last}`,
-        ),
-        4000,
-      )
-        .then((v) => ({ ...l, object: !!v?.object && !!v?.line, line: String(v?.line ?? "").slice(0, 60) }))
-        .catch(() => ({ ...l, object: false })),
+  // 「だれを責めている発言か」だけを AI に聞き、どの弁護人が出るかはコードが決める（AI に任せたら依頼人の側に異議を出した 10/16）
+  const p = plaintiff || "原告", d = defendant || "被告";
+  const v = await within(
+    ask(
+      env,
+      "@cf/mistralai/mistral-small-3.1-24b-instruct",
+      `家庭の法廷。原告=${p}、被告=${d}。いちばん新しい発言が、どちらかを悪い・ずるい・わざと・勝手に などと責めたり決めつけたりしているかを判定する。` +
+        `責められている人が${p}なら "plaintiff"、${d}なら "defendant"、だれも責めていない・ふつうの説明なら "none"。` +
+        "line は、責められた側の弁護人が言う「異議あり！」から始まる40字以内のひとこと（責められた人をかばう内容）。" +
+        '出力は JSON だけ: {"target": "plaintiff | defendant | none", "line": "..."}',
+      `これまで:\n${record}\n\nいちばん新しい発言: ${last}`,
     ),
-  );
-  const pick = votes.find((v) => v.object);
-  return pick ? { id: pick.id, name: pick.name, line: pick.line } : { id: null };
+    6000,
+  ).catch(() => ({ target: "none" }));
+  if (v?.target !== "plaintiff" && v?.target !== "defendant") return { id: null };
+  const l = LAWYERS.find((x) => x.side === (v.target === "plaintiff" ? "原告" : "被告"));
+  const client = v.target === "plaintiff" ? p : d;
+  // 出る弁護人が決まってから、その弁護人として依頼人をかばう一言を作る
+  const w = await within(
+    ask(
+      env,
+      l.model,
+      `あなたは家庭の法廷の${l.name}。依頼人は${client}。いま${client}が責められた。${client}をかばう、子どもにも分かる一言を言う。相手を悪者にしない。` +
+        '出力は JSON だけ: {"line": "異議あり！から始まる40字以内"}',
+      `責めた発言: ${last}`,
+      120,
+    ),
+    5000,
+  ).catch(() => null);
+  let line = String(w?.line ?? `異議あり！${client}さんのことを決めつけないでください！`).slice(0, 60);
+  if (!line.startsWith("異議あり")) line = `異議あり！${line}`;
+  return { id: l.id, name: l.name, line };
 }
 
 // 調査官ホー：「調べる」は Wikipedia（鍵いらず）を引いて子ども向けにまとめる。「再現」は状況の絵を描く（Workers AI の画像モデル）
@@ -190,7 +203,7 @@ async function investigate(env, { query, mode }) {
   if (mode === "illustrate") {
     const p = await within(
       ask(env, "@cf/mistralai/mistral-small-3.1-24b-instruct", '子どものけんかの場面を、絵を描く AI への英語の指示に直す。出力は JSON だけ: {"prompt": "英語で1文", "caption": "日本語で15字以内の題"}', query),
-      6000,
+      12000,
     );
     const img = await env.AI.run("@cf/black-forest-labs/flux-1-schnell", {
       prompt: `${p.prompt}. Cute anime illustration, evidence photo style, bright, kid-friendly, no text.`,
@@ -201,7 +214,7 @@ async function investigate(env, { query, mode }) {
   const api = (q) => `https://ja.wikipedia.org/w/api.php?${q}&format=json&origin=*`;
   const hdr = { headers: { "user-agent": "ouchi-court/0.1 (family mock trial; https://ouchi-court.panman.workers.dev)" } };
   // 長い問いのままだと関係ない記事が出る（10/16）。先に検索の言葉を1〜2語に絞る
-  const kw = await within(ask(env, "@cf/mistralai/mistral-small-3.1-24b-instruct", '問いを、百科事典で引く日本語の見出し語1〜2語に直す。出力は JSON だけ: {"words": "語 語"}', query, 60), 4000).catch(() => ({ words: query }));
+  const kw = await within(ask(env, "@cf/mistralai/mistral-small-3.1-24b-instruct", '問いを、百科事典で引く日本語の見出し語1〜2語に直す。出力は JSON だけ: {"words": "語 語"}', query, 60), 6000).catch(() => ({ words: query }));
   const hits = (await (await fetch(api(`action=query&list=search&srlimit=2&srsearch=${encodeURIComponent(kw.words || query)}`), hdr)).json()).query?.search ?? [];
   let text = "";
   const sources = [];
@@ -212,16 +225,19 @@ async function investigate(env, { query, mode }) {
       sources.push({ title: h.title, url: `https://ja.wikipedia.org/wiki/${encodeURIComponent(h.title)}` });
     }
   }
-  const v = await within(
-    ask(
-      env,
-      "@cf/mistralai/mistral-small-3.1-24b-instruct",
+  const SUMMARY =
       "あなたは家庭の法廷の調査官ホー（フクロウの探偵）。調べた資料をもとに、問いに子どもにも分かる言葉で2文以内で答える。資料に答えがなければ「資料では分からなかった」と正直に言い、一般的な考え方を1文添える。" +
-        '出力は JSON だけ: {"finding": "...", "title": "証拠品の名前（10字以内）", "used": "資料が答えに役立ったら true、関係なかったら false"}',
-      `問い: ${query}\n\n資料:\n${text || "（見つからなかった）"}`,
-    ),
-    7000,
-  );
+        'title は資料の名前ではなく、問いの中身を表す証拠品の名前にする。出力は JSON だけ: {"finding": "...", "title": "証拠品の名前（10字以内）", "used": "資料が答えに役立ったら true、関係なかったら false"}';
+  const material = `問い: ${query}\n\n資料:\n${text || "（見つからなかった）"}`;
+  // 弁護人と同時に呼ばれると Workers AI が遅くなる（10/16 7秒で打ち切られた）。長めに待ち、だめなら Gemini でまとめる
+  const v = await within(ask(env, "@cf/mistralai/mistral-small-3.1-24b-instruct", SUMMARY, material), 12000).catch(async () => {
+    const out = await gemini(env, "gemini-flash-lite-latest", {
+      systemInstruction: { parts: [{ text: SUMMARY }] },
+      contents: [{ role: "user", parts: [{ text: material }] }],
+      generationConfig: { responseMimeType: "application/json" },
+    });
+    return parseJson(out.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join(""));
+  });
   return { kind: "search", caption: v.title || "調査結果", finding: v.finding, sources: v.used === true || v.used === "true" ? sources : [] };
 }
 
