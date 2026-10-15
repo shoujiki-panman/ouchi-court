@@ -359,6 +359,49 @@ async function topics(env) {
 }
 
 // ひとりで挑戦モードの相手：プレイヤーの主張に弱い所があれば、反対側の弁護人コン太が反論で割り込む
+// ダンガンロンパの「ノンストップ議論」（10/16「もっとダンガンロンパっぽく」）
+// 開廷前に、子どもが使える「コトダマ」（証拠・事実のカード）を3つ配る
+async function kotodama(env, { topic, side, detail, pro, con }) {
+  const v = await within(
+    askGemini(
+      env,
+      `子ども向けのディベートゲーム。お題「${topic}」で子どもは「${side}」側。子どもが相手の言い分を崩すのに使える「コトダマ」（証拠や事実のカード）を3つ作る。` +
+        "お題の説明に書いてあることか、だれでも知っている一般的なことだけを使う（数字や固有名詞を作らない）。name は10字以内、text はそのカードの中身を30字以内（10歳に分かる言葉）。3つは別々の切り口にする。" +
+        '出力は JSON だけ: {"bullets": [{"name": "...", "text": "..."}]}',
+      `お題の説明: ${detail ?? ""}\n賛成の理由の例: ${pro ?? ""}\n反対の理由の例: ${con ?? ""}`,
+    ),
+    9000,
+  ).catch(() => null);
+  const bullets = (v?.bullets ?? []).filter((b) => b?.name && b?.text).slice(0, 3).map((b) => ({ name: String(b.name).slice(0, 12), text: String(b.text).slice(0, 40) }));
+  return { bullets };
+}
+// ノンストップ議論のセリフ：コン太ともう1人が反論。黄色い「ウィークポイント」のうち1つだけが、コトダマで崩せる本物の弱点
+async function debate(env, { topic, side, statement, bullets = [], level = 1 }) {
+  const list = bullets.map((b, i) => `${i}: ${b.name}（${b.text}）`).join("\n");
+  const v = await within(
+    askGemini(
+      env,
+      `子ども向けのディベートゲーム。お題「${topic}」で子どもは「${side}」側。子どもの発言に対して、反対側の2人が短く言い返すセリフを作る。` +
+        "lines[0] はライバルのコン太（キツネの弁護人・少し生意気）、lines[1] は観客（ざわざわした声）。各セリフは35字以内で、子どもを傷つける言い方はしない。" +
+        "それぞれのセリフに weak（セリフの中にそのまま入っている6〜14字の部分）を1つ決める。どちらか1つの weak だけを、下のコトダマのどれかで崩せる本物の弱点（言い過ぎ・決めつけ・説明と食い違う所）にする。もう1つはそれっぽいが崩せない所にする。" +
+        `answer に、本物の弱点がある line の番号と、それを崩せる bullet の番号を入れる。コン太のレベルは${level}（高いほど弱点を目立たなくする）。` +
+        '出力は JSON だけ: {"lines": [{"text": "...", "weak": "..."}, {"text": "...", "weak": "..."}], "answer": {"line": 0, "bullet": 0}}',
+      `コトダマ:\n${list}\n\n子どもの発言: ${statement}`,
+    ),
+    9000,
+  ).catch(() => null);
+  const lines = (v?.lines ?? []).filter((l) => l?.text).slice(0, 2).map((l) => {
+    const text = String(l.text).slice(0, 50);
+    // weak がセリフに入っていなければ、真ん中あたりを弱点にする
+    const weak = l.weak && text.includes(l.weak) ? String(l.weak) : text.slice(Math.floor(text.length / 3), Math.floor(text.length / 3) + 8);
+    return { text, weak };
+  });
+  if (lines.length < 2 || !bullets.length) return { lines: [] };
+  const line = Number(v?.answer?.line) === 1 ? 1 : 0;
+  const bullet = Math.max(0, Math.min(bullets.length - 1, Number(v?.answer?.bullet) || 0));
+  return { lines, answer: { line, bullet } };
+}
+
 async function opponent(env, { topic, side, record, last, level = 1 }) {
   const v = await within(
     ask(
@@ -461,6 +504,8 @@ export default {
       }
       if (pathname === "/api/opponent") return json(await opponent(env, await request.json()));
       if (pathname === "/api/rival") return json(await rival(env, await request.json()));
+      if (pathname === "/api/kotodama") return json(await kotodama(env, await request.json()));
+      if (pathname === "/api/debate") return json(await debate(env, await request.json()));
       if (pathname === "/api/penalty-image") return json(await penaltyImage(env, await request.json()));
       if (pathname === "/api/investigate") return json(await investigate(env, await request.json()));
       return json({ error: "not found" }, 404);

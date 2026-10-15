@@ -40,7 +40,8 @@ const SOLO = (topic, side, rv) => `あなたは「おうち裁判 ひとりで�
 段取り:
 1. 開廷！ルールを一言で。子どもに名前を聞き「〇〇さんですね？」と確かめる。
 2. お題の説明を2〜3文で（上の説明を使う）。賛成・反対の例を1つずつ言い、「ラウンド1！${side}側の〇〇さん、どう思う？」と聞く。
-3. 各ラウンド: 子どもが意見を言う → 採点の知らせが届いたら1文だけ実況 → すぐコン太として反論を1つ短く → 「ラウンド2！」と次へ。アドバイスや説明は試合中にしない（白熱させる）。
+3. 各ラウンド: 子どもが意見を言う → 採点の知らせが届いたら1文だけ実況 → 知らせの指示どおりに進める。アドバイスや説明は試合中にしない（白熱させる）。
+キャラの話し分け（画面のキャラが切りかわる合図なので必ず守る）: コン太として話すときは「コン太だ！」で始め、生意気で早口な声。ポン子として話すときは「ポン子です！」で始め、明るく高い声。司会に戻るときだけ「タヌ吉です！」と言う（コン太やポン子が話したあと以外では名乗らない）。コン太とポン子は1回に1〜2文だけ。
 4. 「試合終了」の知らせが来たら「勝負あり！」とだけ言う。判決は画面が始めるので、ひとりで挑戦では call_judge を呼ばない（自分でラウンドを数えて終わらせない。採点の知らせが来るまで次へ進まない）。
 5. 判決と罰ゲームのあと「これにて閉廷！」。
 守ること: 子どもが話している途中で口をはさまない。子どもを言い負かして終わらせない。考えを言えたことを必ずほめる。日本語で話す。`;
@@ -186,7 +187,8 @@ function flyStatement(text) {
   el.className = "fly display";
   el.style.top = `${18 + Math.random() * 38}%`;
   el.innerHTML = t.replace(/[<>&]/g, "").replace(WEAK, "<b>$1</b>");
-  el.onclick = () => ronpa(t, el);
+  if (mode === "solo") el.classList.add("mine");
+  else el.onclick = () => ronpa(t, el);
   $("stage").append(el);
   setTimeout(() => el.remove(), 9500);
 }
@@ -266,6 +268,7 @@ async function openCourt(resume = false) {
     suddenDeath = false;
     extraRound = false;
     gameOver = false;
+    if (mode !== "solo") bullets = [];
     ronpaArmed = false;
     breakdown = { reason: 0, example: 0, counter: 0, ronpa: 0, repeat: 0, final: 0 };
     roundWins = { player: 0, rival: 0 };
@@ -376,11 +379,14 @@ async function openCourt(resume = false) {
             heardTurn = "";
           }
           speakingTurn += t;
-          // 弁護人に切りかえるのは、せりふの最初で名乗ったときだけ（書記官が「コン太、どうぞ」と言っただけでは切りかえない）
-          const head = speakingTurn.slice(0, 16);
-          const id = /ポン子(です|よ|だよ)|弁護人ポン子/.test(head) ? "lawyerP" : /コン太(です|だ|だよ)|弁護人コン太/.test(head) ? "lawyerD" : "bailiff";
-          if (who !== id) onStage(id, speakingTurn, { fresh: true });
-          else onStage(id, t);
+          // 名乗ったらその人に切りかえる（文の途中でも）。「コン太、どうぞ」のような呼びかけでは切りかえない
+          const tail = speakingTurn.slice(-24);
+          const named = /ポン子(です|よ！|だよ)|弁護人ポン子/.test(tail) ? "lawyerP" : /コン太(です|だ！|だよ|様)|弁護人コン太/.test(tail) ? "lawyerD" : /タヌ吉(です|だよ)|書記官タヌ吉/.test(tail) ? "bailiff" : null;
+          const id = named ?? (speakingTurn.length === t.length ? "bailiff" : who);
+          if (who !== id) {
+            speakingTurn = t;
+            onStage(id, t, { fresh: true });
+          } else onStage(id, t);
           note(CAST[id].name, t);
         },
         interrupted: () => {
@@ -891,7 +897,129 @@ async function soloPoint(r, statement) {
     setTimeout(() => judge({ name: "call_judge", id: null, args: {} }), 3500);
   }
   step(end.startsWith("試合終了") ? "verdict" : `r${Math.min(rounds + 1, 3)}`);
-  live?.send({ clientContent: { turns: [{ role: "user", parts: [{ text: `（ラウンド${rounds}の採点: 子ども+${me}（${parts.join("・")}）、コン太+${rival}。合計 あなた${soloScore.player} - ${soloScore.rival}コン太。理由「${r.why}」。${end || `実況は1文だけで、すぐコン太の反論 → 「ラウンド${rounds + 1}！」${rounds + 1 === 3 ? "（最終ラウンド！得点2倍と言って煽る）" : ""}へ。テンポよく、白熱させて。`}）` }] }], turnComplete: true } });
+  // 次のラウンドの前に、ノンストップ議論（コン太の反論を画面に流し、子どもがコトダマで撃ち抜く）
+  const debateNext = !end && bullets.length > 0;
+  const nextCue = `「ラウンド${rounds + 1}！」${rounds + 1 === 3 ? "（最終ラウンド！得点2倍と言って煽る）" : ""}`;
+  live?.send({ clientContent: { turns: [{ role: "user", parts: [{ text: `（ラウンド${rounds}の採点: 子ども+${me}（${parts.join("・")}）、コン太+${rival}。合計 あなた${soloScore.player} - ${soloScore.rival}コン太。理由「${r.why}」。${end || (debateNext ? "実況は1文だけ。このあと画面で「ノンストップ議論」が始まる（コン太の反論は画面に流れる）。結果の知らせが来るまで黙って待つ。" : `実況は1文だけで、「コン太だ！」で始めて反論を1つ短く → 「タヌ吉です！」で ${nextCue}へ。テンポよく、白熱させて。`)}）` }] }], turnComplete: true } });
+  if (!debateNext) return;
+  const d = await api("/api/debate", { topic: topic?.motion, side, statement, bullets, level: rivalInfo.level }).catch(() => null);
+  const out = d?.lines?.length ? await nonstopDebate(d) : null;
+  const msg = !out
+    ? `（「コン太だ！」で始めて反論を1つ短く、「タヌ吉です！」で ${nextCue}へ）`
+    : out.hit
+      ? `（ノンストップ議論の結果：子どもがコン太側の「${out.weak}」を、コトダマ「${out.bullet}」で${out.full ? "撃ち抜いて論破！大成功" : "撃ち抜いた！（惜しい、もっと合うコトダマもあった）"}。+${out.pts}点で、合計 あなた${soloScore.player} - ${soloScore.rival}コン太。まず「ポン子です！」で論破をほめる一言、次に「コン太だ！」で悔しがる一言、最後に「タヌ吉です！」で ${nextCue}へ）`
+      : `（ノンストップ議論の結果：論破ならず。「コン太だ！」で始めて「${d.lines[0].text}」と得意げに言い張り、「ポン子です！」で子どもを励ます一言、「タヌ吉です！」で ${nextCue}へ）`;
+  live?.send({ clientContent: { turns: [{ role: "user", parts: [{ text: msg }] }], turnComplete: true } });
+}
+
+// 証拠品＝ヒントカード：AIが開廷前に作っておく。試合中もお題の下に出して、話すときのヒントにする（10/16 本人案）
+function showHintCards() {
+  $("hintCards")?.remove();
+  if (!bullets.length || mode !== "solo") return;
+  const row = document.createElement("div");
+  row.id = "hintCards";
+  row.innerHTML = `<span class="lbl">🃏 証拠品（ヒントカード）</span>` + bullets.map((b) => `<span class="hc" title="${b.text}"><b>${b.name}</b>${b.text}</span>`).join("");
+  $("topicCard").append(row);
+}
+// ── ノンストップ議論（ダンガンロンパ） ──
+// 相手のセリフが流れる → 黄色いウィークポイントのうち本物を、合うコトダマで撃ち抜くと「論破」
+let bullets = [], selBullet = 0;
+function drawCylinder(on) {
+  $("kotodama").innerHTML = bullets.map((b, i) => `<button class="kd ${i === selBullet ? "sel" : ""}" data-i="${i}"><b>${b.name}</b><small>${b.text}</small></button>`).join("");
+  $("kotodama").classList.toggle("on", on);
+  $("kotodama").querySelectorAll(".kd").forEach((el) => (el.onclick = () => {
+    selBullet = Number(el.dataset.i);
+    sfx.tick(speaker.ctx);
+    drawCylinder(true);
+  }));
+}
+async function nonstopDebate(d) {
+  selBullet = 0;
+  $("stage").classList.add("debate");
+  await banner("ノンストップ議論 開始！");
+  drawCylinder(true);
+  onStage("lawyerD", "コトダマを選んで、黄色いウィークポイントを撃ち抜け！", { fresh: true });
+  heat(25);
+  let done, missed = 0;
+  const finish = new Promise((r) => (done = r));
+  const els = d.lines.map((l, i) => {
+    const el = document.createElement("div");
+    el.className = `nsd display ${i ? "from-left" : ""}`;
+    el.style.top = `${22 + i * 26}%`;
+    el.style.animationDelay = `${i * 2.2}s`;
+    const safe = (x) => x.replace(/[<>&]/g, "");
+    const t = safe(l.text), w = safe(l.weak);
+    el.innerHTML = `<small>${i ? "観客" : "コン太"}</small>${t.replace(w, `<b class="wp">${w}</b>`)}`;
+    el.querySelector(".wp")?.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (i !== d.answer.line) {
+        // 外れ：撃っても跳ね返される
+        missed++;
+        el.classList.add("deflect");
+        setTimeout(() => el.classList.remove("deflect"), 500);
+        sfx.tick(speaker.ctx);
+        popAt("跳ね返された！", 50, 40);
+        if (missed >= 2) done(null);
+        return;
+      }
+      done({ el, line: l, full: selBullet === d.answer.bullet });
+    });
+    $("stage").append(el);
+    return el;
+  });
+  const timer = setTimeout(() => done(null), 16000);
+  const hit = await finish;
+  clearTimeout(timer);
+  drawCylinder(false);
+  let out = { hit: false };
+  if (hit) {
+    const pts = hit.full ? 3 : 1;
+    soloScore.player += pts;
+    breakdown.ronpa += pts;
+    ronpaCount++;
+    showSoloScore();
+    await cutIn("それは違うよ！");
+    hit.el.classList.add("hit");
+    await breakGlass();
+    score(pts * 100, "論破");
+    out = { hit: true, full: hit.full, pts, weak: hit.line.weak, bullet: bullets[selBullet]?.name ?? "" };
+  } else {
+    popAt("論破ならず……", 50, 40);
+    speaker?.clip("crowd/ee.mp3", 0.5);
+  }
+  els.forEach((el) => setTimeout(() => el.remove(), 700));
+  $("stage").classList.remove("debate");
+  return out;
+}
+// 「それは違うよ！」の斜めの帯
+async function cutIn(word) {
+  const el = $("cutin");
+  el.querySelector("span").textContent = word;
+  el.classList.remove("on");
+  void el.offsetWidth;
+  el.classList.add("on");
+  speedLines();
+  flash();
+  await sfx.objection(speaker.ctx);
+  await new Promise((r) => setTimeout(r, 900));
+}
+// 論破のガラスが割れる演出
+async function breakGlass() {
+  const g = $("glass");
+  g.innerHTML = Array.from({ length: 14 }, () => {
+    const x = Math.random() * 100, y = Math.random() * 100;
+    const pts = Array.from({ length: 3 }, () => `${x + (Math.random() - 0.5) * 50}% ${y + (Math.random() - 0.5) * 50}%`).join(",");
+    return `<i style="clip-path: polygon(${pts}); --dx: ${(Math.random() - 0.5) * 140}%; --dy: ${(Math.random() - 0.3) * 140}%; --r: ${(Math.random() - 0.5) * 540}deg"></i>`;
+  }).join("") + `<b class="display">論破！</b>`;
+  g.classList.remove("on");
+  void g.offsetWidth;
+  g.classList.add("on");
+  sfx.glass(speaker.ctx);
+  speaker?.clip("crowd/oo.mp3", 0.6);
+  react("ronpa");
+  heat(30);
+  await new Promise((r) => setTimeout(r, 1600));
+  g.classList.remove("on");
 }
 // 3分の持ち時間（議論が始まってから）。切れたら勝負あり
 function startSoloClock() {
@@ -920,6 +1048,14 @@ function coach(text) {
 }
 
 // 段の掲示：議論タイム・証拠品タイム
+function banner(text) {
+  $("banner").textContent = text;
+  $("banner").classList.remove("on");
+  void $("banner").offsetWidth;
+  $("banner").classList.add("on");
+  speaker?.clip("crowd/zawa.mp3", 0.5);
+  return new Promise((r) => setTimeout(r, 1400));
+}
 let shownPhase = "";
 function phase(kind) {
   if (shownPhase === kind) return;
@@ -1153,6 +1289,18 @@ function closeCourt() {
     $("intro").classList.remove("hide");
     loadRival();
     showShelf();
+    $("topicCard").style.display = "none";
+    $("soloScore").style.display = "none";
+    $("feverClock").textContent = "";
+    $("box").textContent = "";
+    $("status").textContent = "";
+    $("turnBtn").style.display = "none";
+    $("kotodama").classList.remove("on");
+    $("result").classList.remove("on");
+    $("stage").classList.remove("debate", "fever", "glitch");
+    document.querySelectorAll(".fly, .nsd").forEach((el) => el.remove());
+    document.body.classList.remove("solo", "versus");
+    document.querySelectorAll("#steps span").forEach((el) => (el.className = ""));
   }, 1500);
   beat?.stop();
   stopMic?.();
@@ -1215,6 +1363,13 @@ $("solo").onclick = async () => {
       topic = chosen;
       side = b.dataset.s;
       try {
+        // コトダマ（証拠のカード）を3つ配る。ノンストップ議論で撃つ弾
+        api("/api/kotodama", { topic: topic.motion, side, detail: topic.detail ?? topic.background, pro: topic.pro, con: topic.con })
+          .then((k) => {
+            bullets = k.bullets ?? [];
+            showHintCards();
+          })
+          .catch(() => (bullets = []));
         rivalInfo = await api("/api/rival", {});
         rivalInfo.lastResult = rivalInfo.history?.at(-1)?.result;
         startLevel = rivalInfo.level ?? 1;
@@ -1223,6 +1378,7 @@ $("solo").onclick = async () => {
       // お題は1行。くわしくは開いたときだけ（PCでスクロールが要った 10/16）
       $("topicCard").innerHTML = `<details><summary><b>お題：${topic.motion}</b> <small>あなたは「${side}」側・くわしく ▾</small></summary><p>${topic.detail ?? topic.background}</p><div class="pc"><span>👍 賛成：${topic.pro ?? "？"}</span><span>👎 反対：${topic.con ?? "？"}</span></div>${topic.source ? `<small>話題のもと：<a href="${topic.source.url}" target="_blank">${topic.source.title}</a></small>` : ""}</details>`;
       $("topicCard").style.display = "block";
+      showHintCards();
       shout("あなた VS コン太");
       openCourt(false);
     }));
@@ -1268,6 +1424,7 @@ if (new URLSearchParams(location.search).has("debug")) {
     },
     ronpa: () => ronpa(),
     glitch: () => glitchRoulette(),
+    cut: async () => { await cutIn("それは違うよ！"); await breakGlass(); },
     state: () => ({ myTurn, turnLeft, connected: live?.ws?.readyState, mode, ...dbg }),
   };
 }

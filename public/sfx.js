@@ -190,6 +190,23 @@ export const sfx = {
       get track() { return now; },
     };
   },
+  // 論破のガラスが割れる「パリーン」（高い音のかけらをばらまく）
+  glass(ctx) {
+    const t = ctx.currentTime + 0.01;
+    hit(ctx, t, { freq: 5000, type: "highpass", decay: 0.5, gain: 0.6 });
+    for (let i = 0; i < 9; i++) {
+      const o = ctx.createOscillator();
+      o.type = "sine";
+      o.frequency.value = 2200 + Math.random() * 3800;
+      const g = ctx.createGain();
+      const at = t + Math.random() * 0.25;
+      g.gain.setValueAtTime(0.06, at);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + 0.25);
+      o.connect(g).connect(ctx.destination);
+      o.start(at);
+      o.stop(at + 0.3);
+    }
+  },
   // ルーレットの「カッ」
   tick(ctx) {
     hit(ctx, ctx.currentTime + 0.01, { freq: 2500, type: "bandpass", decay: 0.03, gain: 0.35 });
