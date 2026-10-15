@@ -8,7 +8,7 @@ const noise = (ctx, seconds) => {
   return buf;
 };
 
-function hit(ctx, at, { freq = 800, type = "lowpass", decay = 0.12, gain = 0.6 } = {}) {
+function hit(ctx, at, { freq = 800, type = "lowpass", decay = 0.12, gain = 0.6 } = {}, dest = ctx.destination) {
   const src = ctx.createBufferSource();
   src.buffer = noise(ctx, decay + 0.05);
   const f = ctx.createBiquadFilter();
@@ -17,7 +17,7 @@ function hit(ctx, at, { freq = 800, type = "lowpass", decay = 0.12, gain = 0.6 }
   const g = ctx.createGain();
   g.gain.setValueAtTime(gain, at);
   g.gain.exponentialRampToValueAtTime(0.001, at + decay);
-  src.connect(f).connect(g).connect(ctx.destination);
+  src.connect(f).connect(g).connect(dest);
   src.start(at);
   return src;
 }
@@ -79,26 +79,35 @@ export const sfx = {
   },
   // ずっと鳴る法廷ビート（tempo を上げると速くなる）。止めるまで続く
   beat(ctx) {
+    // 音量のつまみを1つ通す。人が話す番は小さくする（マイクが拾うと、AI が「まだ話している」と思って返事をしなくなる 10/15）
+    const master = ctx.createGain();
+    master.gain.value = 0.15;
+    master.connect(ctx.destination);
     let bpm = 92, on = true, n = 0;
     const loop = () => {
       if (!on) return;
       const t = ctx.currentTime + 0.02;
-      hit(ctx, t, { freq: 140, type: "lowpass", decay: 0.18, gain: n % 4 === 0 ? 0.5 : 0.28 }); // どん
-      if (n % 2 === 1) hit(ctx, t, { freq: 4000, type: "highpass", decay: 0.05, gain: 0.12 }); // ちっ
-      const o = ctx.createOscillator(); // ベース（不穏に半音上下）
+      hit(ctx, t, { freq: 140, type: "lowpass", decay: 0.18, gain: n % 4 === 0 ? 0.5 : 0.28 }, master);
+      if (n % 2 === 1) hit(ctx, t, { freq: 4000, type: "highpass", decay: 0.05, gain: 0.12 }, master);
+      const o = ctx.createOscillator();
       o.type = "triangle";
       o.frequency.value = [55, 55, 58.27, 51.91][Math.floor(n / 4) % 4];
       const g = ctx.createGain();
       g.gain.setValueAtTime(0.09, t);
       g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
-      o.connect(g).connect(ctx.destination);
+      o.connect(g).connect(master);
       o.start(t);
       o.stop(t + 0.25);
       n++;
       setTimeout(loop, 60000 / bpm / 2);
     };
     loop();
-    return { stop: () => (on = false), faster: (to) => (bpm = Math.min(170, to)), get bpm() { return bpm; } };
+    return {
+      stop: () => (on = false),
+      faster: (to) => (bpm = Math.min(170, to)),
+      loud: (yes) => master.gain.setTargetAtTime(yes ? 1 : 0.06, ctx.currentTime, 0.15),
+      get bpm() { return bpm; },
+    };
   },
   // 観客のどよめき（ざわっ）
   crowd(ctx, gain = 0.25) {

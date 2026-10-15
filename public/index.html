@@ -83,6 +83,16 @@
   #title { position: absolute; inset: 0; display: none; place-items: center; background: rgba(0,0,0,.8); z-index: 9; text-align: center; }
   #title.on { display: grid; }
   #title .badge { font-size: 2.6rem; padding: 14px 30px; border: 5px solid var(--gold); background: radial-gradient(circle, #3a1650, #12061c); text-shadow: 3px 3px 0 var(--pink); animation: stamp .5s forwards; }
+  /* 段の掲示 */
+  #banner { position: absolute; left: 0; right: 0; top: 34%; text-align: center; font-size: 2rem; color: #fff; background: linear-gradient(90deg, transparent, var(--purple) 20%, var(--pink) 80%, transparent); padding: 10px; transform: scaleY(0); z-index: 6; pointer-events: none; text-shadow: 3px 3px 0 #000; }
+  #banner.on { animation: banner 2.4s forwards; }
+  @keyframes banner { 0% { transform: scaleY(0); } 10% { transform: scaleY(1); } 85% { transform: scaleY(1); opacity: 1; } 100% { transform: scaleY(1); opacity: 0; } }
+  button.glow { animation: glow .6s infinite alternate; }
+  @keyframes glow { to { box-shadow: 0 0 22px var(--gold), 4px 4px 0 #000; } }
+  /* 後ろを流れる観客のテロップ */
+  .tel { position: absolute; left: -30%; white-space: nowrap; font-size: 1.3rem; color: rgba(255,255,255,.28); transform: skewX(-12deg); animation: tel 6s linear forwards; z-index: 1; pointer-events: none; }
+  @keyframes tel { to { left: 110%; } }
+  #resume { display: none; }
   /* 罰ゲームのルーレット */
   #roulette { position: absolute; inset: 0; display: none; place-items: center; background: rgba(0,0,0,.82); z-index: 5; text-align: center; }
   #roulette.on { display: grid; }
@@ -115,6 +125,7 @@
   footer { color: var(--muted); font-size: .72rem; margin-top: 16px; line-height: 1.6; }
   #pass { display: none; }
   @media (max-width: 560px) {
+    #banner { font-size: 1.25rem; }
     #stage { height: 430px; } #hero { width: 200px; height: 200px; } .seat, .seat .ring { width: 54px; } .seat .ring { height: 54px; } .seat span { font-size: .55rem; }
     #shout { font-size: 2.8rem; } #stamp { font-size: 3.2rem; } .reel { width: 100px; } .fly { font-size: 1.2rem; }
   }
@@ -136,6 +147,7 @@
     <div id="vote"><div><h2 class="display">投票タイム</h2><div class="reels" id="reels"></div></div></div>
     <div id="roulette"><div><h2 class="display">罰ゲーム</h2><div id="rWho"></div><div id="rItem" class="display">？？？</div><div id="count" class="display"></div></div></div>
     <div id="stamp" class="display">和解</div>
+    <div id="banner" class="display"></div>
     <div id="flash"></div>
   </div>
 
@@ -144,7 +156,9 @@
     <button id="ronpa" class="display" disabled><span>論破！</span></button>
     <button id="objection" class="sub" disabled><span>異議あり！</span></button>
     <button id="evidenceBtn" class="sub" disabled><span>📷 証拠品</span></button>
+    <button id="verdictBtn" class="sub" disabled><span>⚖️ 判決へ</span></button>
     <button id="close" class="sub" disabled><span>閉廷</span></button>
+    <button id="resume" class="big display"><span>再開する</span></button>
     <input id="pass" type="password">
   </div>
   <div id="cam"><video id="video" autoplay playsinline muted></video><br><button id="submitEv"><span>この証拠品を突きつける</span></button> <button id="cancelEv" class="sub"><span>やめる</span></button></div>

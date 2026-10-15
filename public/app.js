@@ -6,23 +6,22 @@ import { PUNISHMENTS } from "./punishments.js";
 
 const BAILIFF = `あなたは家庭の法廷「おうち裁判」の書記官タヌ吉です。きょうだいや家族の小さなけんかを、テレビのゲームショーのようにテンション高く、楽しく進行します。相手は5〜10歳の子どもと、その親。
 登場するのは: 原告と被告（子ども）、原告側の弁護人ポン子、被告側の弁護人コン太（どちらもあなたが声色を変えて演じる。必ず「弁護人ポン子です」「弁護人コン太です」と名乗ってから話す）、証人（見ていた親など）、そして判決を出す裁判長タヌキと3人の判事（別の係。call_judge で呼ぶ）。
-段取り:
-1. 開廷を宣言し、原告に名前と、何があったかを聞く。
-2. 原告の話が終わったら、弁護人ポン子として「つまり〇〇さんは、〜と言いたいのですね？」と一言で整理し、合っているか確かめる。
-3. 被告に名前と言い分を聞く。弁護人コン太として同じように整理する。
-4. 二人の話で食い違う所を1つだけ選び、どちらかの名前を呼んで、はい・いいえで答えやすい質問をする。見ていた人がいれば証人として呼んでもよい。
+段取り（急がない。子どもが言い合いを楽しめるように、各段でしっかり時間をとる）:
+1. 開廷を宣言し、原告に名前と、何があったかを聞く。弁護人ポン子として「つまり〇〇さんは、〜と言いたいのですね？」と整理する。
+2. 被告に名前と言い分を聞く。弁護人コン太として同じように整理する。
+3. 「議論タイム、スタート！」と宣言する。「おかしいと思ったら『異議あり！』、相手の言葉をやっつけたいときは『論破！』と言ってね」と伝える。原告と被告に交互に、相手の言い分への言い返しを聞く。2〜3往復するまで続ける。弁護人も時々「異議あり！」と言って盛り上げてよい。
+4. 「証拠品タイム！」と宣言する。「証拠になる物はある？あったら証拠品ボタンでカメラに見せてね」と聞く。証拠品が届いたら何が写っているか言う。見ていた人がいれば証人として呼ぶ。
 5. 二人に、最後に言っておきたいことを1つずつ聞く。
-6. 「これより、判事たちが合議し、裁判長が判決を言い渡します」と言って call_judge を呼ぶ。判決はあなたが言わない。
-7. 判決のあと、罰や仲直りがちゃんとできたかを楽しく確かめ、「これにて閉廷！」で締める。
+6. 「判決が聞きたくなったら、判決ボタンを押すか『判決お願いします』と言ってね」と言う。だれかが「判決お願いします」と言うか、判決ボタンが押されるまで call_judge は絶対に呼ばない。それまでは議論や証拠品を続けてよい。
+7. 判決のあと、罰ゲームがちゃんとできたかを楽しく確かめ、「これにて閉廷！」で締める。
 法廷ドラマの決まり:
-- 誰かが「論破！」と言ったら（または「論破」の知らせが届いたら）、盛り上げながら「おおっと、論破が出ました！」と言い、論破した人に名前と、どこがおかしいと思ったかを聞く。そのあと、論破された側にも言い分を聞く。
+- 誰かが「論破！」と言ったら（または論破の知らせが届いたら）、「おおっと、論破が出ました！」と盛り上げ、論破した人に名前と、どこがおかしいと思ったかを聞く。そのあと論破された側にも言い分を聞く。
 - 誰かが「異議あり！」と言ったら、「異議を認めます。どうぞ」と言って、その人の話を聞く。
-- 証拠品が提出されたら（画像が届いたら）、何が写っているかを一言で言い、だれの言い分に関係するかを確かめる。
 守ること: 次に話す人を必ず名前で呼ぶ。1回に聞くことは1つだけ。1回のせりふは2文まで。子どもが話している途中で口をはさまない。話がそれたらやさしく戻す。どちらかを悪者にしない。恥ずかしい思いをさせない。日本語で話す。`;
 
 const CALL_JUDGE = {
   name: "call_judge",
-  description: "双方の言い分と最後のひとことを聞き終えたら呼ぶ。3人の判事が合議し、裁判長タヌキが判決を言い渡す（判決の文はこの道具の結果で返る）。",
+  description: "だれかが『判決お願いします』と言うか、判決ボタンが押されたときだけ呼ぶ（それより前に呼ばない）。3人の判事が合議し、裁判長タヌキが判決を言い渡す（判決の文はこの道具の結果で返る）。",
   parameters: {
     type: "OBJECT",
     properties: {
@@ -164,8 +163,15 @@ function stamp(text) {
   setTimeout(() => $("stamp").classList.remove("on"), 4500);
 }
 
-async function openCourt() {
-  judged = false;
+async function openCourt(resume = false) {
+  userClosed = false;
+  if (!resume) shownPhase = "";
+  $("resume").style.display = "none";
+  if (resume) {
+    stopMic?.();
+    beat?.stop();
+  }
+  judged = resume ? judged : false;
   adjourned = false;
   localStorage.setItem("ouchi-court-pass", pass());
   $("open").disabled = true;
@@ -174,14 +180,16 @@ async function openCourt() {
     const { token, model } = await api("/api/token");
     speaker = new Speaker();
     onStage("judge", "これより、おうち裁判を開廷します。", { fresh: true });
-    await sfx.fanfare(speaker.ctx);
+    if (!resume) await sfx.fanfare(speaker.ctx);
     beat = sfx.beat(speaker.ctx);
-    heatVal = 0;
-    points = 0;
-    combo = 0;
-    ronpaCount = objectionCount = evidenceCount = 0;
+    if (!resume) {
+      heatVal = 0;
+      points = 0;
+      combo = 0;
+      ronpaCount = objectionCount = evidenceCount = 0;
+      $("pts").textContent = "0";
+    }
     heat(0);
-    $("pts").textContent = "0";
     live = new Live({
       token,
       model,
@@ -195,17 +203,19 @@ async function openCourt() {
       },
       on: {
         ready: async () => {
-          live.send({ clientContent: { turns: [{ role: "user", parts: [{ text: "開廷してください。" }] }], turnComplete: true } });
+          const restart = resume && record.length ? `接続が切れたので再開します。これまでの法廷記録:\n${record.map((r) => `${r.who}: ${r.text}`).join("\n").slice(-3000)}\n続きから進めてください（開廷の宣言はしない）。${judged ? "判決はもう出ています。" : ""}` : "開廷してください。";
+          live.send({ clientContent: { turns: [{ role: "user", parts: [{ text: restart }] }], turnComplete: true } });
           try {
             stopMic = await startMic((b64) => !judging && live.audio(b64));
             status("開廷中：そのまま話しかけてください");
           } catch (e) {
             status(`マイクが使えません（${e.message}）。ブラウザのマイクの許可を確かめてください。`);
           }
-          ["close", "objection", "evidenceBtn", "ronpa"].forEach((id) => ($(id).disabled = false));
+          ["close", "objection", "evidenceBtn", "ronpa", "verdictBtn"].forEach((id) => ($(id).disabled = false));
         },
         audio: (b64) => {
           talk(true);
+          beat?.loud(true);
           speaker.play(b64);
         },
         heard: (t) => {
@@ -214,6 +224,7 @@ async function openCourt() {
             objectionCount++;
             heat(15);
             score(50, "異議");
+            react("objection");
             shout("異議あり！");
           }
           if (who !== "witness") onStage("witness", "", { fresh: true });
@@ -223,6 +234,8 @@ async function openCourt() {
         },
         said: (t) => {
           if (/これにて閉廷|閉廷します|閉廷！/.test(speakingTurn + t)) adjourn();
+          if (/議論タイム/.test(speakingTurn + t)) phase("debate");
+          if (/証拠品タイム/.test(speakingTurn + t)) phase("evidence");
           if (heardTurn) {
             flyStatement(heardTurn);
             heardTurn = "";
@@ -234,17 +247,24 @@ async function openCourt() {
           note(CAST[id].name, t);
         },
         interrupted: () => {
+          beat?.loud(false);
           speaker.stop();
           talk(false);
         },
         turnComplete: () => {
           speakingTurn = "";
+          setTimeout(() => !speaker.busy && beat?.loud(false), 600);
           closeNote();
           setTimeout(() => !speaker.busy && talk(false), 400);
         },
         toolCall: (calls) => calls.forEach(judge),
         goAway: () => status("まもなく接続が切れます（10分ごと）"),
-        closed: () => status("閉廷しました"),
+        closed: (e) => {
+          if (userClosed) return status("閉廷しました");
+          beat?.loud(false);
+          status(`接続が切れました（${e?.code ?? ""} ${e?.reason ?? ""}）。「再開する」で続きから始められます。`);
+          $("resume").style.display = "inline-block";
+        },
         error: (m) => status(m),
       },
     });
@@ -256,6 +276,7 @@ async function openCourt() {
 
 // 判事たちの合議：3人がそれぞれ票を入れ、裁判長タヌキがまとめて言い渡す
 let judged = false;
+let userClosed = false;
 async function judge(call) {
   if (call.name !== "call_judge") return;
   if (judged) {
@@ -332,8 +353,32 @@ function score(n, label) {
   popAt(`${label} +${n * combo}`, 30 + Math.random() * 40, 25 + Math.random() * 20);
   if (speaker) sfx.coin(speaker.ctx);
 }
+// 観客：声（public/crowd/）と、後ろを流れるテロップ
+const CROWD = {
+  statement: [["zawa", "ザワ…ザワ…"], ["maji", "まじで…？"], ["ee", "えーっ！？"]],
+  ronpa: [["oo", "おおーっ！！"], ["ee", "えーーっ！？"]],
+  objection: [["ee", "えーっ！？"], ["zawa", "ザワザワ…"]],
+  verdict: [["yatta", "わーっ！やったー！"], ["oo", "おおーっ！"]],
+  cheer: [["ganbare", "がんばれー！"]],
+};
+function crowd(kind) {
+  const list = CROWD[kind] ?? CROWD.statement;
+  const [clip, text] = list[Math.floor(Math.random() * list.length)];
+  speaker?.clip(`crowd/${clip}.mp3`, kind === "statement" ? 0.3 : 0.5);
+  for (let i = 0; i < 3; i++) {
+    const t = document.createElement("div");
+    t.className = "tel display";
+    t.textContent = i === 0 ? text : ["ザワ…", "ザワ…", "ひそひそ…", "えー…", "なになに？"][Math.floor(Math.random() * 5)];
+    t.style.top = `${12 + Math.random() * 50}%`;
+    t.style.animationDelay = `${i * 0.5}s`;
+    t.style.fontSize = `${1 + Math.random() * 0.8}rem`;
+    $("stage").append(t);
+    setTimeout(() => t.remove(), 7000);
+  }
+}
 function react(kind = "statement") {
-  const pool = { statement: ["😮", "🤔", "👀", "😂"], ronpa: ["🔥", "💥", "😱", "⚡"], verdict: ["🎉", "👏", "😂", "🎊"] }[kind];
+  crowd(kind);
+  const pool = { statement: ["😮", "🤔", "👀", "😂"], ronpa: ["🔥", "💥", "😱", "⚡"], objection: ["⚡", "😮"], verdict: ["🎉", "👏", "😂", "🎊"] }[kind];
   for (let i = 0; i < (kind === "statement" ? 3 : 8); i++) {
     const e = document.createElement("div");
     e.className = "emoji";
@@ -343,7 +388,6 @@ function react(kind = "statement") {
     $("stage").append(e);
     setTimeout(() => e.remove(), 2800);
   }
-  if (speaker) sfx.crowd(speaker.ctx, kind === "statement" ? 0.12 : 0.3);
 }
 async function showTitle() {
   const t = ronpaCount >= 2 ? "論破王 👑" : objectionCount >= 2 ? "異議マスター ⚡" : evidenceCount ? "名探偵 🔍" : heatVal >= 80 ? "白熱バトラー 🔥" : "仲直りマスター 🤝";
@@ -382,6 +426,24 @@ async function punishmentTime(p, who) {
     await new Promise((r) => setTimeout(r, 1200));
   }
   $("roulette").classList.remove("on");
+}
+
+// 段の掲示：議論タイム・証拠品タイム
+let shownPhase = "";
+function phase(kind) {
+  if (shownPhase === kind) return;
+  shownPhase = kind;
+  const text = { debate: "議論タイム！ 異議あり・論破のチャンス！", evidence: "証拠品タイム！ 証拠を突きつけろ！" }[kind];
+  $("banner").textContent = text;
+  $("banner").classList.remove("on");
+  void $("banner").offsetWidth;
+  $("banner").classList.add("on");
+  $("evidenceBtn").classList.toggle("glow", kind === "evidence");
+  $("objection").classList.toggle("glow", kind === "debate");
+  $("ronpa").classList.toggle("glow", kind === "debate");
+  heat(10);
+  speaker?.clip("crowd/oo.mp3", 0.4);
+  if (speaker) sfx.objection(speaker.ctx);
 }
 
 // 閉廷！：叫び＋木槌3回＋紙吹雪
@@ -462,21 +524,28 @@ function submitEvidence() {
 }
 
 function closeCourt() {
+  userClosed = true;
   beat?.stop();
   stopMic?.();
   live?.close();
   speaker?.stop();
   hideCamera();
   $("open").disabled = false;
-  ["close", "objection", "evidenceBtn", "ronpa"].forEach((id) => ($(id).disabled = true));
+  ["close", "objection", "evidenceBtn", "ronpa", "verdictBtn"].forEach((id) => ($(id).disabled = true));
 }
 
-$("open").onclick = openCourt;
+$("open").onclick = () => openCourt(false);
+$("resume").onclick = () => openCourt(true);
 $("close").onclick = async () => {
   await adjourn();
   setTimeout(closeCourt, 1500);
 };
 $("ronpa").onclick = () => ronpa();
+$("verdictBtn").onclick = () => {
+  if (!live || judged) return;
+  shout("判決を求む！");
+  live.send({ clientContent: { turns: [{ role: "user", parts: [{ text: "判決お願いします！（判決ボタンが押されました。すぐ call_judge を呼んでください）" }] }], turnComplete: true } });
+};
 $("objection").onclick = () => {
   objectionCount++;
   heat(15);

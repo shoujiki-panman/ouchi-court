@@ -45,6 +45,18 @@ export class Speaker {
     src.onended = () => this.playing.delete(src);
     return new Promise((done) => src.addEventListener("ended", done));
   }
+  // 観客の声などの短い音（mp3）。一度読んだら覚えておく
+  async clip(url, volume = 0.4) {
+    this.clips ??= new Map();
+    if (!this.clips.has(url)) this.clips.set(url, fetch(url).then((r) => r.arrayBuffer()).then((b) => this.ctx.decodeAudioData(b)));
+    const buf = await this.clips.get(url);
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    const g = this.ctx.createGain();
+    g.gain.value = volume;
+    src.connect(g).connect(this.ctx.destination);
+    src.start();
+  }
   stop() {
     for (const s of this.playing) s.stop();
     this.playing.clear();
