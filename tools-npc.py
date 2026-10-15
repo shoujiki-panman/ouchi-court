@@ -1,8 +1,9 @@
 # コン太とポン子の決めゼリフを AivisSpeech（Mac で動く無料の読み上げ・ACML 1.0 で商用可・クレジット任意）で作り、public/voice/ に置く。
+# どちらも男の子のキャラなので男性の声モデルを使う（10/16「なんで女なんだよ」）。AivisHub から fumifumi・hinakoyuhara を入れた。
 # ブラウザの読み上げは声が変だった（10/16）。決めゼリフだけ声を入れ、長いセリフは文字で出す（ダンガンロンパも一部だけ声が入る）。
 import json, os, subprocess, tempfile, urllib.parse, urllib.request
 B = "http://127.0.0.1:10101"
-KON = {  # コン太：まお「からかい」を少し低く・早口に（生意気なキツネの男の子）
+KON = {  # コン太：fumifumi（若い男性・ACML 1.0）を少し高く・早口に（生意気なキツネの男の子）
   "objection": "異議あり！",
   "doukana": "それはどうかな？",
   "chotto": "ちょっと待った！その意見には穴があるよ！",
@@ -15,7 +16,7 @@ KON = {  # コン太：まお「からかい」を少し低く・早口に（生
   "hantai": "でも、反対の理由だってちゃんとあるんだよ！",
   "chigau": "本当にそうかな？ぼくはちがうと思うね！",
 }
-PON = {  # ポン子：コハク「あまあま」を明るく（子どもの味方の弁護人）
+PON = {  # ポン子：hinakoyuhara（中年男性・ACML 1.0）で、どっしり明るく（子どもの味方のパンダ弁護人）
   "nice": "ナイス論破！バッチリ効いたね！",
   "kimatta": "それは違うよ、決まったー！その調子！",
   "sugoi": "すごい！コン太の弱いところ、ちゃんと見抜いたね！",
@@ -30,7 +31,7 @@ def synth(text, style, out, pitch, speed, inton):
     open(w, "wb").write(urllib.request.urlopen(urllib.request.Request(f"{B}/synthesis?speaker={style}", data=json.dumps(q).encode(), headers={"content-type": "application/json"}, method="POST")).read())
     subprocess.check_call(["ffmpeg", "-y", "-loglevel", "error", "-i", w, "-b:a", "80k", out])
 for key, text in KON.items():
-    synth(text, 888753764, f"public/voice/kon-{key}.mp3", -0.05, 1.15, 1.5)
+    synth(text, 606865152, f"public/voice/kon-{key}.mp3", 0.06, 1.15, 1.6)
 for key, text in PON.items():
-    synth(text, 1878365377, f"public/voice/pon-{key}.mp3", 0.04, 1.08, 1.4)
+    synth(text, 2058221184, f"public/voice/pon-{key}.mp3", 0.0, 1.05, 1.5)
 print(len(os.listdir("public/voice")), "clips", sum(os.path.getsize(f"public/voice/{f}") for f in os.listdir("public/voice")) // 1024, "KB")

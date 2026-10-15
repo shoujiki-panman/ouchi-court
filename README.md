@@ -60,6 +60,6 @@ Browser (public/)                      Cloudflare Worker (src/worker.js)
 ## Credits
 
 - BGM: 魔王魂 (maou.audio)
-- Kon-ta / Pon-ko voices: AivisSpeech (まお・コハク, ACML 1.0)
+- Kon-ta / Pon-ko voices: AivisSpeech (fumifumi・hinakoyuhara, ACML 1.0)
 - Character and courtroom art: generated with FLUX.1 [schnell] on Cloudflare Workers AI
 - Sound effects: synthesized in the browser
