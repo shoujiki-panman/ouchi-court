@@ -324,12 +324,42 @@ async function judge(call) {
 
 // ドパガキ要素：ずっと鳴るビート・ヒートメーター・論破の点数とコンボ・観客のリアクション・最後の称号
 let beat, heatVal = 0, points = 0, combo = 0, comboTimer, ronpaCount = 0, objectionCount = 0, evidenceCount = 0;
+let fever = false;
 function heat(add) {
+  if (fever && add > 0) return;
   heatVal = Math.max(0, Math.min(100, heatVal + add));
   $("heatBar").style.width = `${heatVal}%`;
   $("heat").classList.toggle("max", heatVal >= 100);
   beat?.faster(92 + heatVal * 0.7);
-  if (heatVal >= 100 && add > 0) popAt("白熱！🔥", 50, 30);
+  if (heatVal >= 100 && add > 0) feverTime();
+}
+
+// ゲージが満タン：FEVER（20秒・点数3倍・法廷が赤く光る・書記官も煽る）。終わったらゲージは3割に戻る
+async function feverTime() {
+  if (fever) return;
+  fever = true;
+  $("stage").classList.add("fever");
+  shout("FEVER！🔥");
+  speaker?.clip("crowd/oo.mp3", 0.6);
+  react("ronpa");
+  beat?.faster(170);
+  live?.send({ clientContent: { turns: [{ role: "user", parts: [{ text: "（法廷が白熱してFEVERタイムになりました！20秒間、テンション最高で「議論が白熱してきたぞー！」と煽り、二人に本音を一言ずつぶつけさせてください。論破や異議は今なら点数3倍です）" }] }], turnComplete: true } });
+  let left = 20;
+  $("feverClock").textContent = `FEVER ${left}`;
+  await new Promise((done) => {
+    const t = setInterval(() => {
+      left--;
+      $("feverClock").textContent = left > 0 ? `FEVER ${left}` : "";
+      if (left <= 0) {
+        clearInterval(t);
+        done();
+      }
+    }, 1000);
+  });
+  fever = false;
+  $("stage").classList.remove("fever");
+  heatVal = 30;
+  heat(0);
 }
 function popAt(text, x = 50, y = 40) {
   const el = document.createElement("div");
@@ -347,10 +377,10 @@ function score(n, label) {
     combo = 0;
     $("combo").textContent = "";
   }, 20000);
-  points += n * combo;
+  points += n * combo * (fever ? 3 : 1);
   $("pts").textContent = points;
   $("combo").textContent = combo > 1 ? `×${combo} COMBO` : "";
-  popAt(`${label} +${n * combo}`, 30 + Math.random() * 40, 25 + Math.random() * 20);
+  popAt(`${label} +${n * combo * (fever ? 3 : 1)}${fever ? " FEVER×3" : ""}`, 30 + Math.random() * 40, 25 + Math.random() * 20);
   if (speaker) sfx.coin(speaker.ctx);
 }
 // 観客：声（public/crowd/）と、後ろを流れるテロップ

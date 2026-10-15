@@ -83,6 +83,11 @@
   #title { position: absolute; inset: 0; display: none; place-items: center; background: rgba(0,0,0,.8); z-index: 9; text-align: center; }
   #title.on { display: grid; }
   #title .badge { font-size: 2.6rem; padding: 14px 30px; border: 5px solid var(--gold); background: radial-gradient(circle, #3a1650, #12061c); text-shadow: 3px 3px 0 var(--pink); animation: stamp .5s forwards; }
+  /* FEVER（ゲージ満タン） */
+  #stage.fever #bg { filter: brightness(.8) saturate(2) hue-rotate(-30deg); animation: sweep 3s ease-in-out infinite alternate; }
+  #stage.fever { box-shadow: 0 0 0 4px var(--pink), 0 0 40px var(--pink); animation: feverPulse .45s infinite alternate; }
+  @keyframes feverPulse { to { box-shadow: 0 0 0 4px var(--gold), 0 0 60px var(--gold); } }
+  #feverClock { position: absolute; left: 14px; top: 30px; z-index: 4; font-size: 1.3rem; color: var(--gold); text-shadow: 2px 2px 0 #000; }
   /* 段の掲示 */
   #banner { position: absolute; left: 0; right: 0; top: 34%; text-align: center; font-size: 2rem; color: #fff; background: linear-gradient(90deg, transparent, var(--purple) 20%, var(--pink) 80%, transparent); padding: 10px; transform: scaleY(0); z-index: 6; pointer-events: none; text-shadow: 3px 3px 0 #000; }
   #banner.on { animation: banner 2.4s forwards; }
@@ -138,6 +143,7 @@
   <div id="stage">
     <div id="bg"></div>
     <div id="heat"><div id="heatBar"></div></div>
+    <div id="feverClock" class="display"></div>
     <div id="score" class="display">論破 <span id="pts">0</span>pt <span id="combo"></span></div>
     <div id="title"><div><div style="color:var(--muted)">本日の称号</div><div class="badge display" id="badge">論破王</div></div></div>
     <div id="hero"><img id="heroImg" src="img/judge.jpg" alt=""></div>
