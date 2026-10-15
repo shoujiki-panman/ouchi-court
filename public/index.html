@@ -32,8 +32,7 @@
   .seat span { position: absolute; top: calc(100% + 3px); left: 50%; transform: translateX(-50%); font-size: .66rem; background: rgba(0,0,0,.75); border: 1px solid var(--pink); padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
 
   /* 話している人（大きく） */
-  #hero { position: absolute; left: 50%; bottom: 122px; width: 250px; height: 250px; transform: translateX(-50%); transition: opacity .25s, transform .35s; mix-blend-mode: lighten;
-    -webkit-mask-image: radial-gradient(circle at 50% 50%, #000 58%, transparent 71%); mask-image: radial-gradient(circle at 50% 50%, #000 58%, transparent 71%); }
+  #hero { position: absolute; left: 50%; bottom: 122px; width: 250px; height: 250px; transform: translateX(-50%); transition: opacity .25s, transform .35s; filter: drop-shadow(0 8px 14px rgba(0,0,0,.6)); }
   #hero img { width: 100%; height: 100%; object-fit: contain; }
   #hero.swap { opacity: 0; transform: translateX(-30%) scale(.9); }
   /* キャラの動き：ふだんは息をする／話すと声の大きさで伸び縮み（--amp）／登場・異議・判決の動き */
@@ -207,11 +206,6 @@
     <div id="flash"></div>
   </div>
 
-  <div id="names" class="controls">
-    <input id="nameP" placeholder="訴える人（原告）の名前" maxlength="12">
-    <span>VS</span>
-    <input id="nameD" placeholder="訴えられた人（被告）の名前" maxlength="12">
-  </div>
   <div class="controls">
     <button id="open" class="big display"><span>開廷する</span></button>
     <button id="ronpa" class="display" disabled><span>論破！</span></button>

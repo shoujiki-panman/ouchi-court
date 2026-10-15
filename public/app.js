@@ -7,7 +7,7 @@ import { PUNISHMENTS } from "./punishments.js";
 const BAILIFF = `あなたは家庭の法廷「おうち裁判」の書記官タヌ吉です。きょうだいや家族の小さなけんかを、テレビのゲームショーのようにテンション高く、楽しく進行します。相手は5〜10歳の子どもと、その親。
 登場するのは: 原告と被告（子ども）、調査官ホー（フクロウの探偵。investigate で呼ぶ。調べものと再現イラストの係）、原告側の弁護人ポン子、被告側の弁護人コン太（どちらもあなたが声色を変えて演じる。必ず「弁護人ポン子です」「弁護人コン太です」と名乗ってから話す）、証人（見ていた親など）、そして判決を出す裁判長タヌキと3人の判事（別の係。call_judge で呼ぶ）。
 段取り（急がない。子どもが言い合いを楽しめるように、各段でしっかり時間をとる）:
-1. 開廷を宣言し、原告に名前と、何があったかを聞く。弁護人ポン子として「つまり〇〇さんは、〜と言いたいのですね？」と整理する。
+1. 開廷を宣言し、原告に名前と、何があったかを聞く。名前を聞いたら「〇〇さんですね？」と一度だけ確かめ、違うと言われたら正しい名前に直す（音声の聞き取りで名前を聞き違えることがあるため）。被告の名前も同じように確かめる。弁護人ポン子として「つまり〇〇さんは、〜と言いたいのですね？」と整理する。
 2. 被告に名前と言い分を聞く。弁護人コン太として同じように整理する。
 3. 「議論タイム、スタート！」と宣言する。「おかしいと思ったら『異議あり！』、相手の言葉をやっつけたいときは『論破！』と言ってね」と伝える。原告と被告に交互に、相手の言い分への言い返しを聞く。2〜3往復するまで続ける。弁護人も時々「異議あり！」と言って盛り上げてよい。
 4. 「証拠品タイム！」と宣言する。「証拠になる物はある？あったら証拠品ボタンでカメラに見せてね」と聞く。証拠品が届いたら何が写っているか言う。見ていた人がいれば証人として呼ぶ。証拠がないときや、事実を確かめたいときは「調査官ホー、出番です！」と言って investigate を呼ぶ（調べるなら search、その場面を絵にするなら illustrate）。
@@ -95,7 +95,7 @@ function onStage(id, text, { fresh = false } = {}) {
     if (changed) {
       $("hero").classList.add("swap");
       setTimeout(() => {
-        $("heroImg").src = c.img;
+        $("heroImg").src = c.img.replace(".jpg", ".png");
         $("hero").classList.remove("swap");
         const entry = { lawyerP: "enter-right", lawyerD: "enter-left", judge: "enter-zoom", detective: "enter-spin" }[id] ?? "enter-zoom";
         $("hero").classList.remove("enter-left", "enter-right", "enter-zoom", "enter-spin");
@@ -224,16 +224,8 @@ async function openCourt(resume = false) {
   }
   if (!resume) {
     parties.length = 0;
-    const p = $("nameP").value.trim(), d = $("nameD").value.trim();
-    if (!p || !d) {
-      status("先に、訴える人（原告）と訴えられた人（被告）の名前を入れてください。");
-      $(p ? "nameD" : "nameP").focus();
-      return;
-    }
-    parties.push(p, d);
-    localStorage.setItem("ouchi-court-names", JSON.stringify([p, d]));
-    $("balP").textContent = `${p}（原告）`;
-    $("balD").textContent = `${d}（被告）`;
+    $("balP").textContent = "原告";
+    $("balD").textContent = "被告";
     balanceVal = 0;
     $("balMark").style.left = "50%";
   }
@@ -267,7 +259,7 @@ async function openCourt(resume = false) {
       model,
       setup: {
         generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Puck" } } } },
-        systemInstruction: { parts: [{ text: `${BAILIFF}\n今日の原告は「${parties[0]}」、被告は「${parties[1]}」。音声の聞き取りで名前がちがって聞こえても、必ずこの2人のどちらかとして扱い、ほかの名前を作らない。開廷したら「${parties[0]}さん」と名前を呼んで訴えを聞く。` }] },
+        systemInstruction: { parts: [{ text: BAILIFF }] },
         tools: [{ functionDeclarations: [CALL_JUDGE, INVESTIGATE] }],
         inputAudioTranscription: {},
         outputAudioTranscription: {},
@@ -309,6 +301,7 @@ async function openCourt(resume = false) {
           if (/これにて閉廷|閉廷します|閉廷！/.test(speakingTurn + t)) adjourn();
           if (/議論タイム|言い返し|反論はある/.test(speakingTurn + t)) phase("debate");
           const said = speakingTurn + t;
+          confirmName(said);
           if (/原告/.test(said)) step("plaintiff");
           if (/被告/.test(said) && stepNow >= 1) step("defendant");
           if (/議論タイム|言い返し|反論/.test(said)) step("debate");
@@ -695,10 +688,23 @@ function showEvidence(card) {
 let lastObjector = "", lawyerBusy = false;
 // 原告・被告の名前：開廷の前に入れてもらう（音声の聞き違えで「カントウさん」になった 10/16）。入っていなければ最初の発言から拾う
 const parties = [];
+function showParties() {
+  if (parties[0]) $("balP").textContent = `${parties[0]}（原告）`;
+  if (parties[1]) $("balD").textContent = `${parties[1]}（被告）`;
+}
+// 書記官が「〇〇さんですね？」と確かめた名前（聞き違えを本人が直したあとの名前）
+function confirmName(text) {
+  const m = text.match(/([ァ-ヶーぁ-ん一-龠A-Za-z]{1,8})さん(?:ですね|で合って|、合って)/);
+  if (!m) return;
+  const slot = stepNow <= 1 ? 0 : 1;
+  parties[slot] = m[1];
+  showParties();
+}
 function pickName(text) {
   if (parties.length >= 2) return;
   const m = text.match(/(?:わたしは|私は|ぼくは|僕は|おれは|俺は)?\s*([ァ-ヶーぁ-ん一-龠A-Za-z]{1,8}?)(?:です|だよ|。|、|！)/);
   if (m && parties.length < 2 && !parties.includes(m[1]) && !/^(うん|はい|いいえ|でも|だって)$/.test(m[1])) parties.push(m[1]);
+  showParties();
 }
 async function lawyersCheck(statement) {
   if (!live || judging || lawyerBusy) return;
@@ -806,9 +812,3 @@ if (new URLSearchParams(location.search).has("debug")) {
   };
 }
 
-// 前回の名前を入れておく
-try {
-  const [p, d] = JSON.parse(localStorage.getItem("ouchi-court-names") ?? "[]");
-  if (p) $("nameP").value = p;
-  if (d) $("nameD").value = d;
-} catch {}
