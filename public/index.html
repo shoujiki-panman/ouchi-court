@@ -301,9 +301,9 @@
   /* ── ノンストップ議論（ダンガンロンパ風） ── */
   body.solo #ronpa, body.solo #objection { display: none; }
   .fly.mine { cursor: default; opacity: .55; font-size: 1.2rem; }
-  #stage.debate::before { content: ""; position: absolute; inset: -50%; z-index: 1; pointer-events: none; background: repeating-conic-gradient(from 0deg, rgba(255,79,163,.16) 0 8deg, transparent 8deg 16deg); animation: spin 14s linear infinite; }
+  #stage.debate::before { content: ""; position: absolute; inset: -50%; z-index: 1; pointer-events: none; background: repeating-conic-gradient(from 0deg, rgba(255,79,163,.16) 0 8deg, transparent 8deg 16deg); animation: raySpin 14s linear infinite; }
   #stage.debate #bg { filter: hue-rotate(-30deg) saturate(1.4) brightness(.55); }
-  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes raySpin { to { transform: rotate(360deg); } }
   .nsd { position: absolute; z-index: 7; left: 100%; white-space: nowrap; font-size: clamp(1.3rem, 3.4vw, 2.1rem); color: #fff; -webkit-text-stroke: 1px #000; text-shadow: 3px 3px 0 #000; transform: perspective(600px) rotateY(-18deg) skewX(-10deg); animation: nsdR 8s linear infinite; }
   .nsd.from-left { left: auto; right: 100%; transform: perspective(600px) rotateY(18deg) skewX(-10deg); animation-name: nsdL; }
   @keyframes nsdR { to { translate: calc(-100vw - 100%) 0; } }
@@ -348,6 +348,13 @@
   #result .more summary { cursor: pointer; color: var(--muted); text-align: center; }
   #result #resultClose { margin-top: 8px; }
   #intro .challenge { background: #3fa9ff; color: #001; padding: 6px 14px; transform: skewX(-8deg); font-size: .95rem; }
+  /* 判決のハンコ：箱ではなく、縁取りの太い文字＋ピンクの集中線（10/16「判決のデザインがダサい」） */
+  #stamp { border: 0; background: none; padding: 0 10px; color: #fff; font-size: clamp(3.4rem, 10vw, 6.4rem); -webkit-text-stroke: 3px #000; text-shadow: 6px 6px 0 var(--pink), 12px 12px 0 #000; letter-spacing: .02em; }
+  #stamp::before { content: ""; position: absolute; left: 50%; top: 50%; width: 260%; aspect-ratio: 1; transform: translate(-50%,-50%); z-index: -1; border-radius: 50%; background: radial-gradient(circle, rgba(255,79,163,.85) 0 18%, transparent 19%), repeating-conic-gradient(rgba(255,79,163,.55) 0 6deg, transparent 6deg 14deg); -webkit-mask: radial-gradient(circle, #000 35%, transparent 70%); mask: radial-gradient(circle, #000 35%, transparent 70%); }
+  /* 投票タイム：スロットの見た目 */
+  #vote h2 { font-size: 2.6rem; color: #fff; -webkit-text-stroke: 2px #000; text-shadow: 4px 4px 0 var(--pink); transform: skewX(-8deg); }
+  .reel { border: 4px solid #000; outline: 3px solid var(--gold); border-radius: 6px; background: linear-gradient(#2a0f3d, #12061c); box-shadow: 0 0 18px rgba(255,210,63,.35); }
+  .reel .val { color: #fff; -webkit-text-stroke: 1px #000; text-shadow: 2px 2px 0 var(--pink); }
 </style>
 </head>
 <body>

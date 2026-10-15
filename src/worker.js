@@ -11,7 +11,7 @@ const GEMINI = "https://generativelanguage.googleapis.com/v1beta";
 const JUDGE_PROMPT =
   "あなたは家庭の裁判所の「タヌキ判事」。きょうだいや家族の小さなけんかを、法廷ごっこで楽しく裁く。相手は5〜10歳。" +
   "重々しく、でもちょっとおとぼけで笑える裁判長。法廷の記録・3人の判事の票・過去の判例を読み、判決を出す。結論（だれの勝ちか・票数）はすでに決まっているので、そのとおりに言い渡し、変えないこと。" +
-  "speech は読み上げる判決文で、必ず「判決を言い渡します。」で始め、4文まで: 勝った方（引き分け・和解もよい）／どちらの言い分のどこが良くてどこがよくなかったか／" +
+  "speech は読み上げる判決文で、必ず「判決を言い渡します。」で始め、3文・90字まで（テンポよく）: 勝った方（引き分け・和解もよい）／どちらの言い分のどこが良くてどこがよくなかったか／" +
   "判例が渡されたときだけ、その中身どおりに一言ふれる（判例がないときや、No precedents のときは過去の話をしない。日付や中身を作らない）／罰。" +
   "罰は、次の罰ゲームの一覧から1つ選び、punishment にその id を入れる（だれがやるかも決める。和解なら二人でやる）:\n" + punishmentList() + "\n" +
   "子どもを恥ずかしい目にあわせる罰、食べ物やおもちゃを取り上げる罰、痛い罰は絶対に出さない。どちらかを悪者と決めつけない。" +
@@ -110,10 +110,20 @@ async function panelVote(env, j, record) {
 // 判決：判例を引く → 3人の判事が票を入れる → 裁判長タヌキがまとめて言い渡す → 判例集に記録する
 async function verdict(env, { record, names, winner: forced, points }) {
   const client = await mcp(env);
+  const precP = names?.length ? client.callTool("get_precedents", { names }).then(textOf).catch(() => "No precedents.") : Promise.resolve("No precedents.");
+  // ひとりで挑戦は勝ち負けが点数で決まっているので、裁判長の判決文を判事の投票と同時に書く（待ち時間 17秒→短く 10/16）
+  const chief = (prec, tally) =>
+    gemini(env, env.JUDGE_MODEL, {
+      systemInstruction: { parts: [{ text: JUDGE_PROMPT }] },
+      contents: [{ role: "user", parts: [{ text: `法廷の記録:\n${record}\n\n判事たちの票:\n${tally}\n\n${prec}` }] }],
+      generationConfig: { responseMimeType: "application/json", temperature: 0.8 },
+    });
+  const forcedLine = forced ? (forced === "draw" ? `点数 ${points} で引き分け` : `点数 ${points} で${forced}の勝ち`) : "";
+  const earlyChief = forced ? precP.then((prec) => chief(prec, `結論（変えないこと）: ${forcedLine}`)) : null;
   const [prec, ...votes] = await Promise.all([
-    names?.length ? client.callTool("get_precedents", { names }).then(textOf).catch(() => "No precedents.") : "No precedents.",
+    precP,
     ...PANEL.map((j) =>
-      Promise.race([panelVote(env, j, record), new Promise((_, no) => setTimeout(() => no(new Error("timeout")), 9000))])
+      Promise.race([panelVote(env, j, record), new Promise((_, no) => setTimeout(() => no(new Error("timeout")), forced ? 6000 : 9000))])
         .then((v) => ({ title: j.title, model: j.model, vote: String(v?.vote ?? "draw"), reason: String(v?.reason ?? "").slice(0, 40) }))
         .catch(() => ({ title: j.title, model: j.model, vote: "draw", reason: "（考えがまとまらず棄権）" })),
     ),
@@ -125,13 +135,9 @@ async function verdict(env, { record, names, winner: forced, points }) {
   for (const v of votes) count.set(v.vote, (count.get(v.vote) ?? 0) + 1);
   const [top, n] = [...count.entries()].sort((a, b) => b[1] - a[1])[0] ?? ["draw", 0];
   const decided = forced ?? (n >= 2 ? top : "draw");
-  const score = forced ? (forced === "draw" ? `点数 ${points} で引き分け` : `点数 ${points} で${forced}の勝ち`) : decided === "draw" ? (n >= 2 ? `${n}対${votes.length - n}で和解（引き分け）` : "票が割れたので和解（引き分け）") : `${n}対${votes.length - n}で${decided}の勝ち`;
+  const score = forced ? forcedLine : decided === "draw" ? (n >= 2 ? `${n}対${votes.length - n}で和解（引き分け）` : "票が割れたので和解（引き分け）") : `${n}対${votes.length - n}で${decided}の勝ち`;
   const tally = `${votes.map((v) => `${v.title}: ${v.vote === "draw" ? "和解" : `${v.vote}の勝ち`}（${v.reason}）`).join("\n")}\n結論（変えないこと）: ${score}`;
-  const out = await gemini(env, env.JUDGE_MODEL, {
-    systemInstruction: { parts: [{ text: JUDGE_PROMPT }] },
-    contents: [{ role: "user", parts: [{ text: `法廷の記録:\n${record}\n\n判事たちの票:\n${tally}\n\n${prec}` }] }],
-    generationConfig: { responseMimeType: "application/json", temperature: 0.8 },
-  });
+  const out = await (earlyChief ?? chief(prec, tally));
   const raw = out.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "{}";
   const v = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1));
   if (!v.speech) throw new Error("no verdict");

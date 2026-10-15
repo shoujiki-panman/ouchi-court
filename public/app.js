@@ -38,7 +38,7 @@ const SOLO = (topic, side, rv) => `あなたは「おうち裁判 ひとりで�
 反対の例: ${topic.con ?? "（自分で考えて）"}
 子どもは「${side}」側。弁護人ポン子は子どもの味方（試合中は応援の一言だけ。アドバイスは試合のあとに画面で出す）。弁護人コン太は反対側のライバル。どちらもあなたが声色を変えて演じ、名乗ってから話す。
 段取り:
-1. 開廷！ルールを一言で。子どもに名前を聞き「〇〇さんですね？」と確かめる。
+1. 開廷！ルールを一言で。子どもに名前を聞く。聞こえた名前で「〇〇さんですね？」と確かめたら、そこで話すのをやめて返事を待つ（お題に進まない）。「はい」なら2へ。「ちがう」と言われたら、もう一度ゆっくり聞き直す。2回聞いても自信がなければ、名前は使わず「チャレンジャー」と呼ぶ（音声の聞き取りで名前を聞き違えることがあるため）。
 2. お題の説明を2〜3文で（上の説明を使う）。賛成・反対の例を1つずつ言い、「ラウンド1！${side}側の〇〇さん、どう思う？」と聞く。
 3. 各ラウンド: 子どもが意見を言う → 採点の知らせが届いたら1文だけ実況 → 知らせの指示どおりに進める。アドバイスや説明は試合中にしない（白熱させる）。
 コン太とポン子のセリフは、画面が別の声で話す。あなたは司会のタヌ吉だけを演じ、コン太やポン子のセリフは言わない（「コン太の反論は…」と代わりに言わない）。
@@ -506,8 +506,11 @@ async function judge(call) {
       penaltyImg = api("/api/penalty-image", { id: v.punishment?.id, who: soloResult === "win" ? "rival" : "clerk" }).catch(() => null);
       api("/api/rival", { result: soloResult, topic: topic?.motion, best: best.text }).then((r) => (rivalInfo = { ...r, lastResult: soloResult })).catch(() => {});
     }
+    // 判決の声は、投票を見せているあいだに作っておく（前は投票が終わってから作っていて待たされた）
+    const voiceP = api("/api/voice", { text: v.speech }).catch(() => null);
     await voteTime(v.panel ?? []);
-    const voice = await api("/api/voice", { text: v.speech }).catch(() => null);
+    // 声が間に合わなければ待たずに文字で進む（テンポ優先）
+    const voice = await Promise.race([voiceP, new Promise((r) => setTimeout(() => r(null), 3000))]);
     drum.stop();
     await sfx.cymbal(speaker.ctx);
     stamp(v.stamp ?? "和解");
@@ -678,19 +681,22 @@ async function punishmentTime(p, who, imgPromise) {
   $("rItem").classList.remove("done");
   $("count").textContent = "";
   $("roulette").classList.add("on");
-  let delay = 50;
-  for (let i = 0; i < 26; i++) {
+  let delay = 45;
+  for (let i = 0; i < 16; i++) {
     $("rItem").textContent = PUNISHMENTS[i % PUNISHMENTS.length].text;
     sfx.tick(speaker.ctx);
     await new Promise((r) => setTimeout(r, delay));
-    delay *= 1.12;
+    delay *= 1.15;
   }
   $("rItem").textContent = p.text;
   $("rItem").classList.add("done");
-  const img = await Promise.race([imgPromise ?? Promise.resolve(null), new Promise((r) => setTimeout(() => r(null), 6000))]);
-  if (img?.image) $("rImg").innerHTML = `<img src="data:image/jpeg;base64,${img.image}" alt="">`;
+  // 絵が間に合わなければ待たない（あとから出てきたら差しこむ）
+  const showImg = (img) => img?.image && $("roulette").classList.contains("on") && ($("rImg").innerHTML = `<img src="data:image/jpeg;base64,${img.image}" alt="">`);
+  const img = await Promise.race([imgPromise ?? Promise.resolve(null), new Promise((r) => setTimeout(() => r(null), 2000))]);
+  if (img) showImg(img);
+  else imgPromise?.then(showImg);
   await sfx.cymbal(speaker.ctx);
-  await new Promise((r) => setTimeout(r, 2200));
+  await new Promise((r) => setTimeout(r, 1500));
   if (p.seconds) {
     for (let n = p.seconds; n > 0; n--) {
       $("count").textContent = n;
@@ -942,7 +948,7 @@ async function soloPoint(r, statement) {
     end = "試合終了！「勝負あり！」とだけ言ってください（判決はこちらで始めます）。";
     shout("勝負あり！");
     gameOver = true;
-    setTimeout(() => judge({ name: "call_judge", id: null, args: {} }), 3500);
+    setTimeout(() => judge({ name: "call_judge", id: null, args: {} }), 1500);
   }
   step(end.startsWith("試合終了") ? "verdict" : `r${Math.min(rounds + 1, 3)}`);
   // 次のラウンドの前に：コン太が言い返す（ノンストップ議論があれば画面で撃ち抜く）→ ポン子がひとこと → 司会が次へ
@@ -1234,63 +1240,110 @@ function download(blob, name) {
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
-// 挑戦状の画像（1200×630。Xのカードの大きさ）
+// 挑戦状の画像（1200×630。Xのカードの大きさ）。ダンガンロンパ風：集中線・太い縁取りの文字・キャラの切り抜き
 async function shareImage(title, url) {
   try {
-    await document.fonts.load('64px "Dela Gothic One"');
+    // 文字ごとにフォントの分割ファイルが読まれるので、使う文字を全部渡して読み込む（「完」だけ別の字体になった）
+    const used = `おうち裁判 挑戦状${title}あなた0123456789-コン太お題「」${topic?.motion ?? ""}【】${side}派の点、超えられる？`;
+    await Promise.all([30, 40, 54, 150].map((px) => document.fonts.load(`${px}px "Dela Gothic One"`, used)));
+    const W = 1200, H = 630;
     const c = document.createElement("canvas");
-    c.width = 1200;
-    c.height = 630;
+    c.width = W;
+    c.height = H;
     const g = c.getContext("2d");
-    g.fillStyle = "#0b0612";
-    g.fillRect(0, 0, 1200, 630);
+    const font = (px) => `${px}px "Dela Gothic One", sans-serif`;
+    const outline = (t, x, y, px, fill, { stroke = "#000", shadow = null, align = "left" } = {}) => {
+      g.font = font(px);
+      g.textAlign = align;
+      g.lineJoin = "round";
+      if (shadow) {
+        g.lineWidth = px / 5;
+        g.strokeStyle = shadow;
+        g.strokeText(t, x + px / 14, y + px / 14);
+        g.fillStyle = shadow;
+        g.fillText(t, x + px / 14, y + px / 14);
+      }
+      g.lineWidth = px / 6;
+      g.strokeStyle = stroke;
+      g.strokeText(t, x, y);
+      g.fillStyle = fill;
+      g.fillText(t, x, y);
+    };
+    // 背景：黒地にピンクの集中線（左の見出しから広がる）
+    g.fillStyle = "#120717";
+    g.fillRect(0, 0, W, H);
     g.save();
-    g.translate(600, 315);
-    g.rotate(-0.18);
-    for (let x = -1400; x < 1400; x += 60) {
-      g.fillStyle = x % 120 === 0 ? "rgba(255,79,163,.22)" : "rgba(138,63,252,.14)";
-      g.fillRect(x, -120, 30, 240);
+    g.translate(380, 250);
+    for (let i = 0; i < 48; i++) {
+      g.rotate((Math.PI * 2) / 48);
+      g.fillStyle = i % 2 ? "rgba(255,79,163,.28)" : "rgba(138,63,252,.18)";
+      g.beginPath();
+      g.moveTo(0, 0);
+      g.lineTo(1400, -40);
+      g.lineTo(1400, 40);
+      g.fill();
     }
     g.restore();
+    const glow = g.createRadialGradient(380, 250, 20, 380, 250, 420);
+    glow.addColorStop(0, "rgba(255,79,163,.55)");
+    glow.addColorStop(1, "rgba(18,7,23,0)");
+    g.fillStyle = glow;
+    g.fillRect(0, 0, W, H);
+    // 右：コン太（ピンクの光を背負う）
     const kon = await new Promise((r) => {
       const i = new Image();
       i.onload = () => r(i);
       i.onerror = () => r(null);
       i.src = "img/lawyerD.png";
     });
-    if (kon) g.drawImage(kon, 860, 230, 320, 320);
-    const font = (px) => `${px}px "Dela Gothic One", sans-serif`;
-    const outline = (t, x, y, px, fill, stroke = "#000") => {
-      g.font = font(px);
-      g.lineWidth = px / 7;
-      g.strokeStyle = stroke;
-      g.strokeText(t, x, y);
-      g.fillStyle = fill;
-      g.fillText(t, x, y);
-    };
-    outline("おうち裁判", 56, 96, 60, "#fff", "#ff4fa3");
-    outline("挑戦状", 420, 96, 40, "#ffd23f");
-    g.save();
-    g.translate(330, 250);
-    g.rotate(-0.12);
+    if (kon) {
+      g.save();
+      g.shadowColor = "#ff4fa3";
+      g.shadowBlur = 40;
+      g.drawImage(kon, 790, 90, 420, 420);
+      g.restore();
+    }
+    // 左上：小さな看板
     g.fillStyle = "#ff4fa3";
-    g.fillRect(-270, -78, 540, 130);
-    g.strokeStyle = "#fff";
-    g.lineWidth = 8;
-    g.strokeRect(-270, -78, 540, 130);
-    g.textAlign = "center";
-    outline(title, 0, 30, 92, "#fff");
+    g.beginPath();
+    g.moveTo(40, 30);
+    g.lineTo(430, 30);
+    g.lineTo(410, 92);
+    g.lineTo(20, 92);
+    g.fill();
+    outline("おうち裁判 挑戦状", 48, 78, 40, "#fff", { stroke: "#000" });
+    // 中央：判決の文字（大きく・斜め）
+    g.save();
+    g.translate(400, 270);
+    g.rotate(-0.1);
+    // 長い判決（完全論破！など）は幅に合わせて小さくする
+    let px = 150;
+    g.font = font(px);
+    while (px > 70 && g.measureText(title).width > 640) g.font = font((px -= 6));
+    outline(title, 0, 0, px, "#fff", { shadow: "#ff4fa3", align: "center" });
     g.restore();
-    outline(`あなた ${soloScore.player} - ${soloScore.rival} コン太`, 60, 400, 52, "#fff");
+    // 下：黒い斜めの帯に点数とお題
+    g.fillStyle = "#000";
+    g.beginPath();
+    g.moveTo(0, 400);
+    g.lineTo(W, 360);
+    g.lineTo(W, H);
+    g.lineTo(0, H);
+    g.fill();
+    g.fillStyle = "#ff4fa3";
+    g.fillRect(0, 396, W, 6);
+    outline(`あなた ${soloScore.player} - ${soloScore.rival} コン太`, 50, 470, 54, "#fff", { stroke: "#000" });
     g.font = font(30);
+    g.textAlign = "left";
     g.fillStyle = "#ffd23f";
     const t = `お題「${topic?.motion ?? ""}」`;
-    g.fillText(t.length > 24 ? `${t.slice(0, 23)}…」` : t, 60, 470);
+    g.fillText(t.length > 30 ? `${t.slice(0, 29)}…」` : t, 50, 530);
     g.fillStyle = "#fff";
-    g.fillText(`【${side}】派の${soloScore.player}点、超えられる？`, 60, 520);
-    g.font = '24px sans-serif';
+    g.fillText(`【${side}】派の ${soloScore.player}点、超えられる？`, 50, 580);
+    g.font = "22px sans-serif";
+    g.textAlign = "right";
     g.fillStyle = "#c9b8e0";
-    g.fillText(url.replace(/^https?:\/\//, "").split("?")[0], 60, 590);
+    g.fillText(url.replace(/^https?:\/\//, "").split("?")[0], W - 30, H - 24);
     return await new Promise((r) => c.toBlob(r, "image/png"));
   } catch {
     return null;
@@ -1321,17 +1374,18 @@ async function voteTime(panel) {
     const el = document.querySelector(`#reel${i} .val`);
     if (el) el.textContent = [...names, "和解"][Math.floor(Math.random() * (names.length + 1))].replace("draw", "和解");
   }, 90));
-  await new Promise((r) => setTimeout(r, 1600));
+  await new Promise((r) => setTimeout(r, 800));
   for (const [i, p] of panel.entries()) {
     clearInterval(spinners[i]);
     const reel = $(`reel${i}`);
     reel.classList.remove("spin");
     reel.querySelector(".val").textContent = p.vote === "draw" ? "和解" : `${p.vote}の勝ち`;
     reel.querySelector(".why").textContent = p.reason;
-    await sfx.gavel(speaker.ctx);
-    await new Promise((r) => setTimeout(r, 700));
+    sfx.tick(speaker.ctx);
+    await new Promise((r) => setTimeout(r, 450));
   }
-  await new Promise((r) => setTimeout(r, 1500));
+  await sfx.gavel(speaker.ctx);
+  await new Promise((r) => setTimeout(r, 700));
   $("vote").classList.remove("on");
 }
 
@@ -1617,7 +1671,11 @@ if (new URLSearchParams(location.search).has("debug")) {
     },
     ronpa: () => ronpa(),
     glitch: () => glitchRoulette(),
-    shareImg: async () => URL.createObjectURL(await shareImage("勝訴！", location.origin)),
+    shareImg: async (title = "勝訴！", me = 12, rv = 3, t = "夏休みは、もっと長くするべき？") => {
+      soloScore = { player: me, rival: rv };
+      topic = { motion: t };
+      return URL.createObjectURL(await shareImage(title, location.origin));
+    },
     cut: async () => { await cutIn("それは違うよ！"); await breakGlass(); },
     state: () => ({ myTurn, turnLeft, connected: live?.ws?.readyState, mode, ...dbg }),
   };
