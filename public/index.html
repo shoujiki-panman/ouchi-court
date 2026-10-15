@@ -333,6 +333,9 @@
   #hintCards .lbl { font-size: .72rem; color: var(--gold); align-self: center; }
   #hintCards .hc { font-size: .72rem; color: var(--muted); background: #1d0f2c; border: 1px solid #6a4a8a; padding: 3px 8px; transform: skewX(-8deg); max-width: 16em; }
   #hintCards .hc b { color: #fff; margin-right: 4px; }
+  /* 論破と異議ありの違いが分かりにくい（10/16）→ ひとりで挑戦では出さない。論破は流れる発言の黄色い所を撃つ（ボタンではない）。異議ありは、ふたりで対戦のときだけ */
+  #ronpa { display: none !important; }
+  body:not(.versus) #objection { display: none !important; }
 </style>
 </head>
 <body>

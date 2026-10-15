@@ -290,6 +290,7 @@ const UNSAFE = /死|亡くな|殺|遺体|事故|事件|逮捕|容疑|襲|負傷|
 // 日本語のニュースだけ（Googleトレンドには外国語の見出しが混ざる 10/16）
 const JAPANESE = /[ぁ-んァ-ヶ]/;
 async function topics(env) {
+  const freshP = freshTopics(env);
   let items = [];
   let src = { title: "Googleトレンド（いま話題）", url: "https://trends.google.co.jp/trending?geo=JP" };
   // いま話題：Google トレンドの「急上昇」（公開の RSS・鍵いらず・数時間ごとに更新）。Wikipedia は遅れる（10/16「最近の話題についてこれない」）
@@ -323,7 +324,7 @@ async function topics(env) {
       ask(
         env,
         "@cf/mistralai/mistral-small-3.1-24b-instruct",
-        "いま話題のキーワードとニュースの番号つき一覧から、小学生が賛成・反対で楽しく議論できる話題を5つ選ぶ。人が亡くなった・けがをした・災害・事件・裁判・戦争・政治家の争い・芸能人の恋愛や結婚・お金のもうけ話は選ばない（スポーツ・ゲーム・食べ物・動物・科学・発明・記録・季節の行事などがよい）。" +
+        "いま話題のキーワードとニュースの番号つき一覧から、小学生が賛成・反対で楽しく議論できる話題を5つ選ぶ（それぞれ別のニュースから。同じニュースから2つ作らない）。人が亡くなった・けがをした・災害・事件・裁判・戦争・政治家の争い・芸能人の恋愛や結婚・お金のもうけ話は選ばない（スポーツ・ゲーム・食べ物・動物・科学・発明・記録・季節の行事などがよい）。" +
           "それぞれを、そのニュースから広げた「意見が分かれる」お題にする。ニュースの事実をそのまま聞くのではなく、子どもが自分の考えで賛成・反対を言えるもの。" +
           "例: 女性が初めて棋士になった → 「スポーツやゲームは、男女いっしょの大会にするべき？」／ノーベル賞の研究 → 「すぐ役に立たない研究にも、お金を使うべき？」。" +
           '出力は JSON だけ: {"topics": [{"n": 一覧の番号, "motion": "お題（25字以内）"}]}',
@@ -332,7 +333,8 @@ async function topics(env) {
       ),
       20000,
     ).catch(() => null);
-    const chosen = (v?.topics ?? []).filter((t) => t?.motion && items[Number(t.n)] && !UNSAFE.test(t.motion)).slice(0, 5);
+    const used = new Set();
+    const chosen = (v?.topics ?? []).filter((t) => t?.motion && items[Number(t.n)] && !UNSAFE.test(t.motion) && !used.has(Number(t.n)) && used.add(Number(t.n))).slice(0, 5);
     picked = (
       await Promise.all(
         chosen.map(async (t) => {
@@ -354,8 +356,31 @@ async function topics(env) {
       )
     ).filter(Boolean);
   }
-  // シャッフルできるように、いま話題と定番を全部返す（10/16「テーマはシャッフルできない？」）
-  return { topics: [...picked, ...EVERGREEN] };
+  // シャッフルできるように、いま話題・AIの新作・定番を全部返す（10/16「テーマはシャッフルできない？」「お題少なくないか？」）
+  const fresh = await freshP;
+  const seen = new Set();
+  const all = [...picked, ...fresh, ...EVERGREEN].filter((t) => !seen.has(t.motion) && seen.add(t.motion));
+  return { topics: all };
+}
+
+// AIの新作お題：いろいろなジャンルから子どもが賛成・反対で話せるお題を作る（1時間ごとにキャッシュごと入れかわる）
+async function freshTopics(env) {
+  const genres = ["食べ物", "動物", "学校", "家のこと", "遊び・ゲーム", "スポーツ", "科学・宇宙", "未来の発明", "季節の行事", "乗り物", "お金・おこづかい", "本・アニメ"];
+  const v = await within(
+    askGemini(
+      env,
+      `小学生が家族と賛成・反対で楽しく議論できるお題を12個作る。ジャンルは次から1つずつ: ${genres.join("、")}。` +
+        "答えが1つに決まらず、どちらの側にも子どもの言葉で理由が言えるもの。人が傷つく話・怖い話・事件・病気・政治・恋愛は入れない。motion は「〜するべき？」「〜したほうがいい？」の形で25字以内。" +
+        "background は一言（〜だよ。の口調・40字以内）、detail は10歳に分かる説明2文（作り話の数字や固有名詞を入れない）、pro と con は賛成派・反対派の理由を1つずつ（子どもの言葉）。" +
+        '出力は JSON だけ: {"topics": [{"motion": "...", "background": "...", "detail": "...", "pro": "...", "con": "..."}]}',
+      `今日の日付: ${new Date().toISOString().slice(0, 10)}（季節に合うお題もまぜる）`,
+    ),
+    15000,
+  ).catch(() => null);
+  return (v?.topics ?? [])
+    .filter((t) => t?.motion && t?.detail && !UNSAFE.test(`${t.motion}${t.detail}${t.background}`))
+    .slice(0, 12)
+    .map((t) => ({ motion: String(t.motion).slice(0, 30), background: t.background, detail: t.detail, pro: t.pro, con: t.con, source: null, fresh: true }));
 }
 
 // ひとりで挑戦モードの相手：プレイヤーの主張に弱い所があれば、反対側の弁護人コン太が反論で割り込む

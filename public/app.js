@@ -1331,6 +1331,7 @@ $("solo").onclick = async () => {
     const { topics } = await api("/api/topics");
     // いま話題を先に、定番はまぜて。🔀 で次の4つ（10/16「テーマはシャッフルできない？」）
     const mix = (a) => a.map((t) => [Math.random(), t]).sort((x, y) => x[0] - y[0]).map((x) => x[1]);
+    // いま話題を先に、そのあとはAIの新作と定番をまぜる
     const pool = [...mix(topics.filter((t) => t.source)), ...mix(topics.filter((t) => !t.source))];
     // シェアのリンク（?t=お題）から来たら、そのお題を先頭に（ニュースが変わっていても、お題だけで遊べる）
     const shared = new URLSearchParams(location.search).get("t")?.slice(0, 40);
@@ -1343,7 +1344,7 @@ $("solo").onclick = async () => {
       const shown = Array.from({ length: Math.min(4, pool.length) }, (_, i) => pool[(page * 4 + i) % pool.length]);
       chosen = shown[0];
       $("topicList").innerHTML = shown
-        .map((t, i) => `<button class="topic sub" data-i="${i}"><span><b>${t.motion}</b><small>${t.detail ?? t.background}${t.source ? "（いま話題から）" : ""}</small></span></button>`)
+        .map((t, i) => `<button class="topic sub" data-i="${i}"><span><b>${t.motion}</b><small>${t.detail ?? t.background}${t.source ? "（いま話題から）" : t.fresh ? "（AIの新作）" : ""}</small></span></button>`)
         .join("");
       $("topicList").querySelectorAll(".topic").forEach((b) => (b.onclick = () => {
         chosen = shown[Number(b.dataset.i)];
