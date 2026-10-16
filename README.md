@@ -42,7 +42,7 @@ Browser (public/)                      Cloudflare Worker (src/worker.js)
  └ /api/topics /api/kotodama /api/rival /api/penalty-image (FLUX on Workers AI)
 ```
 
-- **MCP server**: `oyasumi-mcp` (a separate repository) exposes `get_precedents` and `file_case`
+- **MCP server**: [`oyasumi-mcp`](https://github.com/shoujiki-panman/oyasumi-mcp) exposes `get_precedents` and `file_case`
   (MCP 2025-11-25, Streamable HTTP). Each verdict is filed as a short precedent (names,
   issue, outcome only) and the next trial can cite it — the court remembers your family.
 - **Decisions live in code, not in the model**: vote counting, scoring, who wins, which
