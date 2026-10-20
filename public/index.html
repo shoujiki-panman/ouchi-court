@@ -304,7 +304,7 @@
   #intro .rivalCard img { width: 48px; height: 48px; }
   #intro button { padding: 12px 34px; font-size: 1.2rem; }
   #badgeShelf .b { width: 24px; height: 24px; font-size: 1rem; }
-  @media (max-height: 820px) { #intro .how, #intro .tag { display: none; } }
+  @media (max-height: 820px) { #intro .how { display: none; } }
   /* ── 論破タイム（法廷バトル風） ── */
   body.solo #ronpa, body.solo #objection { display: none; }
   .fly.mine { cursor: default; opacity: .55; font-size: 1.2rem; }
@@ -388,12 +388,10 @@
   .seat span { border: 0; padding: 0 8px; background: rgba(21,17,14,.8); }
   .seat.on .ring { border-color: var(--pink); }
   /* 大見出し・舞台の上の大きな文字は、墨の縁 2px（縁は字の外側に塗る） */
-  #intro .logo, #roulette h2, #count, #paused, .bigScore, #score, #feverClock, .pop, .fly, .nsd, #soloScore { -webkit-text-stroke: 2px #000; paint-order: stroke fill; }
+  #roulette h2, #count, #paused, .bigScore, #score, #feverClock, .pop, .fly, .nsd, #soloScore { -webkit-text-stroke: 2px #000; paint-order: stroke fill; }
   .nsd small { -webkit-text-stroke: 0; }
   .bigScore .total { -webkit-text-stroke: 0; background: var(--paper); padding: 0 8px; }
   /* タイトル：ロゴは白練＋墨の縁＋朱の影1段。ライバルカードは和紙の面 */
-  #intro .logo { color: #f3f3f2; text-shadow: 4px 4px 0 var(--pink); transform: none; }
-  #intro .logo::after { content: ""; display: block; width: 120px; height: 4px; margin: 8px auto 0; background: var(--pink); }
   #intro .rivalCard { transform: none; background: var(--paper); color: var(--sumi); border: 0; border-radius: 4px; box-shadow: 0 4px 0 #000; padding: 8px 16px 8px 8px; }
   #intro .rivalCard b { color: var(--purple); }
   #intro .rivalCard span { color: var(--mutedInk); }
@@ -452,6 +450,39 @@
   .ev { border-radius: 4px; }
   #sharePreview img { border: 4px solid var(--paper); }
 
+  /* ── タイトル画面（10/21 2回目「暗くて地味・ロゴが弱い」）：暗幕を弱め、主役は和紙の札。
+     札の中に墨のロゴ＋右上の朱印「判」、下辺の内側に朱の線、副題。札の下にライバルカード・バッジの帯・同じ幅のボタン2つ ── */
+  #intro { background: radial-gradient(ellipse at center, rgba(21,17,14,.35), rgba(21,17,14,.55)); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); gap: 16px; padding: 16px; justify-content: stretch; }
+  /* 列を舞台の幅いっぱいにする（中央寄せの列だと % 幅が中身の幅に縮み、ロゴが2行に折れた） */
+  #intro .how { display: none; }
+  #intro .plate { position: relative; width: min(560px, 86%); background: var(--paper); color: var(--sumi); border: 4px solid var(--sumi); box-shadow: 0 6px 0 #000; padding: 16px 24px 24px; }
+  #intro .plate::after { content: ""; position: absolute; left: 24px; right: 24px; bottom: 8px; height: 2px; background: var(--pink); }
+  #intro .logo { position: relative; display: inline-block; white-space: nowrap; font-size: clamp(3rem, 9vw, 5rem); line-height: 1.1; color: var(--sumi); -webkit-text-stroke: 0; text-shadow: none; transform: none; }
+  #intro .logo::after { content: "判"; position: absolute; right: -.5em; top: -.2em; width: 40px; aspect-ratio: 1; display: grid; place-items: center; border: 2px solid var(--pink); border-radius: 50%; color: var(--pink); font-size: 20px; line-height: 1; rotate: -12deg; }
+  #intro .tag { display: block; margin-top: 8px; color: var(--sumi); font-size: 1rem; letter-spacing: .1em; }
+  #intro .rivalCard { width: min(560px, 86%); border: 2px solid var(--purple); }
+  /* バッジの帯：和紙の細い帯に1行。？の並びは小さく薄く（狭い画面では省く） */
+  #badgeShelf { width: min(560px, 86%); max-width: none; background: var(--paper); color: var(--sumi); border-radius: 4px; padding: 4px 16px; gap: 4px; align-items: center; justify-content: center; }
+  #badgeShelf .next { order: -1; width: auto; margin: 0 8px 0 0; color: var(--sumi); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  #badgeShelf .b { width: 16px; height: 16px; font-size: .6rem; background: rgba(21,17,14,.08); opacity: .5; }
+  #badgeShelf .b.off { opacity: .3; }
+  #badgeShelf .hist { color: var(--mutedInk); }
+  #badgeShelf .hist summary { color: var(--sumi); }
+  /* ボタン：同じ幅で縦に並べる。脈打ちは「ひとりで挑戦」だけ（skew を消さないよう scale で） */
+  #intro button, #intro .versusBtn { width: min(360px, 86%); font-size: 1.2rem; padding: 16px 24px; color: var(--paper); box-shadow: 0 4px 0 #000; border: 0; }
+  #intro #solo { background: var(--pink); animation: soloPulse .8s infinite alternate; }
+  #intro .versusBtn { background: var(--purple); animation: none; }
+  @keyframes soloPulse { to { scale: 1.03; } }
+  @media (max-width: 560px) {
+    #intro { gap: 8px; }
+    #intro button, #intro .versusBtn { font-size: 1rem; padding: 16px 8px; }
+    #badgeShelf .b { display: none; }
+    /* 狭い画面は札・カード・帯・ボタンを舞台の幅いっぱいにして、ロゴを1行に収める */
+    #intro .plate, #intro .rivalCard, #badgeShelf, #intro button, #intro .versusBtn { width: 100%; }
+    #intro .plate { padding: 16px 24px 24px; }
+    #intro .logo::after { width: 32px; font-size: 16px; top: -.75em; right: -.45em; }
+    #intro .tag { letter-spacing: .04em; white-space: nowrap; }
+  }
 </style>
 </head>
 <body>
@@ -483,8 +514,7 @@
     <div id="banner" class="display"></div>
     <div id="paused" class="display">⏸ 一時停止中</div>
     <div id="intro">
-      <div class="logo display">おうち裁判</div>
-      <div class="tag">AIライバルと 3分ディベートバトル</div>
+      <div class="plate"><div class="logo display">おうち裁判</div><div class="tag">AIライバルと 3分ディベート</div></div>
       <div class="rivalCard"><img src="img/lawyerD.png" alt=""><div><b class="display">ライバル コン太</b><span id="rivalLine">はじめての対決！</span></div></div>
       <div id="badgeShelf"></div>
       <button id="solo" class="big display"><span>🎤 ひとりで挑戦</span></button>

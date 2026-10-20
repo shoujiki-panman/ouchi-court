@@ -1263,87 +1263,93 @@ function download(blob, name) {
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
-// 挑戦状の画像（1200×630。Xのカードの大きさ）。墨の地・太い縁取りの文字・キャラの切り抜き。斜めと集中線はやめた（10/21「ダンガンロンパすぎる」）
+// 挑戦状の画像（1200×630。Xのカードの大きさ）。和紙の地に青海波、左上に朱の帯、判決は墨の大きな字＋朱印、
+// 右に藍の円を背にしたコン太、下に墨の帯（点数・お題）。影や発光は使わない（10/21）
 async function shareImage(title, url) {
   try {
     // 文字ごとにフォントの分割ファイルが読まれるので、使う文字を全部渡して読み込む（「完」だけ別の字体になった）
     const used = `おうち裁判 挑戦状${title}あなた0123456789-コン太お題「」${topic?.motion ?? ""}【】${side}派の点、超えられる？`;
-    await Promise.all([30, 40, 54, 150].map((px) => document.fonts.load(`${px}px "Dela Gothic One"`, used)));
+    await Promise.all([30, 44, 54, 80, 150].map((px) => document.fonts.load(`${px}px "Dela Gothic One"`, used)));
     const W = 1200, H = 630;
+    const SUMI = "#15110e", PAPER = "#f1e7d0", SHU = "#e4532b", AI = "#1f4e79", GOLD = "#e6b422";
     const c = document.createElement("canvas");
     c.width = W;
     c.height = H;
     const g = c.getContext("2d");
     const font = (px) => `${px}px "Dela Gothic One", sans-serif`;
-    const outline = (t, x, y, px, fill, { stroke = "#000", shadow = null, align = "left" } = {}) => {
+    const text = (t, x, y, px, fill, align = "left") => {
       g.font = font(px);
       g.textAlign = align;
-      g.lineJoin = "round";
-      if (shadow) {
-        g.lineWidth = px / 5;
-        g.strokeStyle = shadow;
-        g.strokeText(t, x + px / 14, y + px / 14);
-        g.fillStyle = shadow;
-        g.fillText(t, x + px / 14, y + px / 14);
-      }
-      g.lineWidth = px / 6;
-      g.strokeStyle = stroke;
-      g.strokeText(t, x, y);
       g.fillStyle = fill;
       g.fillText(t, x, y);
     };
-    // 背景：墨の地だけ（集中線と光はやめた 10/21「ダンガンロンパすぎる」）
-    g.fillStyle = "#15110e";
+    // 地：和紙＋青海波（同心円の弧を格子に並べる。薄い墨 .08）
+    g.fillStyle = PAPER;
     g.fillRect(0, 0, W, H);
-    // 右：コン太
+    g.strokeStyle = "rgba(21,17,14,.08)";
+    g.lineWidth = 2;
+    for (let row = 0, y = 0; y <= H + 30; row++, y += 20) {
+      for (let x = row % 2 ? 30 : 0; x <= W + 30; x += 60) {
+        for (const r of [30, 22, 14, 6]) {
+          g.beginPath();
+          g.arc(x, y, r, Math.PI, Math.PI * 2);
+          g.stroke();
+        }
+      }
+    }
+    // 右：藍の円を背にしたコン太
+    g.fillStyle = AI;
+    g.beginPath();
+    g.arc(990, 270, 210, 0, Math.PI * 2);
+    g.fill();
     const kon = await new Promise((r) => {
       const i = new Image();
       i.onload = () => r(i);
       i.onerror = () => r(null);
       i.src = "img/lawyerD.png";
     });
-    if (kon) {
-      g.drawImage(kon, 790, 90, 420, 420);
-    }
-    // 左上：小さな看板
-    g.fillStyle = "#e4532b";
+    if (kon) g.drawImage(kon, 780, 60, 420, 420);
+    // 左上：朱の帯（右端だけ斜め）に「おうち裁判 挑戦状」
+    g.fillStyle = SHU;
     g.beginPath();
-    g.moveTo(40, 32);
-    g.lineTo(440, 32);
-    g.lineTo(440, 96);
-    g.lineTo(40, 96);
+    g.moveTo(0, 32);
+    g.lineTo(560, 32);
+    g.lineTo(530, 122);
+    g.lineTo(0, 122);
     g.fill();
-    outline("おうち裁判 挑戦状", 48, 78, 40, "#f1e7d0", { stroke: "#000" });
-    // 中央：判決の文字（大きく）
-    g.save();
-    g.translate(400, 270);
-    // 長い判決（完全論破！など）は幅に合わせて小さくする
+    text("おうち裁判 挑戦状", 40, 94, 44, PAPER);
+    // 中央左：判決の文字（墨・大きく）。長い判決（完全論破！など）は幅 640px に合わせて小さくする
     let px = 150;
     g.font = font(px);
     while (px > 70 && g.measureText(title).width > 640) g.font = font((px -= 6));
-    outline(title, 0, 0, px, "#e6b422", { align: "center" });
-    g.restore();
-    // 下：黒い帯に点数とお題
-    g.fillStyle = "#0e0b09";
+    const tw = g.measureText(title).width;
+    const base = 340;
+    text(title, 48, base, px, SUMI);
+    // その右上に朱印（直径150・縁8px・「判」・-12度）
+    g.save();
+    g.translate(Math.min(48 + tw + 20, 700), base - px * 0.95);
+    g.rotate((-12 * Math.PI) / 180);
+    g.strokeStyle = SHU;
+    g.lineWidth = 8;
     g.beginPath();
-    g.moveTo(0, 400);
-    g.lineTo(W, 400);
-    g.lineTo(W, H);
-    g.lineTo(0, H);
-    g.fill();
-    g.fillStyle = "#e4532b";
-    g.fillRect(0, 396, W, 6);
-    outline(`あなた ${soloScore.player} - ${soloScore.rival} コン太`, 50, 470, 54, "#e6b422", { stroke: "#000" });
-    g.font = font(30);
-    g.textAlign = "left";
-    g.fillStyle = "#f1e7d0";
+    g.arc(0, 0, 71, 0, Math.PI * 2);
+    g.stroke();
+    g.textBaseline = "middle";
+    text("判", 0, 4, 80, SHU, "center");
+    g.restore();
+    g.textBaseline = "alphabetic";
+    // 下：墨の帯（上に朱の線）に点数とお題
+    g.fillStyle = SUMI;
+    g.fillRect(0, H - 230, W, 230);
+    g.fillStyle = SHU;
+    g.fillRect(0, H - 230, W, 4);
+    text(`あなた ${soloScore.player} - ${soloScore.rival} コン太`, 50, 470, 54, PAPER);
     const t = `お題「${topic?.motion ?? ""}」`;
-    g.fillText(t.length > 30 ? `${t.slice(0, 29)}…」` : t, 50, 530);
-    g.fillStyle = "#f1e7d0";
-    g.fillText(`【${side}】派の ${soloScore.player}点、超えられる？`, 50, 580);
+    text(t.length > 30 ? `${t.slice(0, 29)}…」` : t, 50, 530, 30, GOLD);
+    text(`【${side}】派の ${soloScore.player}点、超えられる？`, 50, 580, 30, PAPER);
     g.font = "22px sans-serif";
     g.textAlign = "right";
-    g.fillStyle = "rgba(241,231,208,.68)";
+    g.fillStyle = "rgba(241,231,208,.5)";
     g.fillText(url.replace(/^https?:\/\//, "").split("?")[0], W - 30, H - 24);
     return await new Promise((r) => c.toBlob(r, "image/png"));
   } catch {
