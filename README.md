@@ -6,8 +6,8 @@
 Kids pick a topic ("Should summer vacation be longer?"), take a side, and argue it out
 **by voice** against Kon-ta, a cheeky AI fox lawyer. A tanuki clerk runs the court live,
 three AI judges vote, and the loser does a silly (never humiliating) penalty.
-The look and flow borrow from Danganronpa-style class trials: flying statements, yellow
-weak points, "それは違うよ！" cut-ins and shattering-glass "論破！".
+The look and flow are courtroom-battle style: flying statements, yellow weak points,
+"そこ、おかしいよ！" cut-ins and a shattering-glass "論破！" (rebuttal).
 
 Live: https://ouchi-court.panman.workers.dev/
 
@@ -15,7 +15,7 @@ Live: https://ouchi-court.panman.workers.dev/
 
 1. **Pick a topic** — today's trending news (Google Trends, filtered for kids), fresh
    AI-made topics, or classics. Shuffle until one looks fun.
-2. **Evidence cards** — the AI hands the child three hint cards (コトダマ) for their side.
+2. **Evidence cards** — the AI hands the child three evidence cards for their side.
 3. **Three rounds, three minutes** — the child speaks; each statement is scored in code:
    reason strength 0–3, +1 for an example, +1 for answering Kon-ta, −1 for repeating,
    final round ×2. A close game can trigger a "glitch roulette" overtime round.

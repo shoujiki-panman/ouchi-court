@@ -6,3 +6,6 @@ public/bgm/
 devpost-draft*.md
 demo-video-script.md
 public/voice/gemini/
+tools-demo/node_modules/
+tools-demo/out/
+public/demo-voice/
