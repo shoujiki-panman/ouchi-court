@@ -73,6 +73,6 @@ from https://maou.audio and save them as `public/bgm/calm.mp3`, `debate.mp3` and
 ## Credits
 
 - BGM: 魔王魂 (maou.audio)
-- Kon-ta / Pon-ko voices: AivisSpeech (fumifumi・hinakoyuhara, ACML 1.0)
+- Kon-ta / Pon-ko voices: Gemini TTS (pre-recorded lines, `tools-npc-gemini.py`)
 - Character and courtroom art: generated with FLUX.1 [schnell] on Cloudflare Workers AI
 - Sound effects: synthesized in the browser

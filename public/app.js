@@ -965,7 +965,7 @@ async function soloPoint(r, statement) {
       await npcSay("lawyerD", pick(["gunu", "iisugi", "madamada"]));
     } else {
       await npcSay("lawyerD", pick(["kuzurenai", "dousita", "zannen"]));
-      await npcSay("lawyerP", pick(["daijoubu", "oshii", "gyakuten"]));
+      await npcSay("lawyerP", pick(["daijoubu", "oshii"])); // gyakuten は Gemini の声がまだ（無料枠待ち）
     }
   } else {
     const said = String(r.line ?? "").replace(/^異議あり！?/, "");

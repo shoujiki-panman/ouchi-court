@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 CAST = {
     # 無料枠はモデルごとに別なので、キャラごとにモデルを分ける（1キャラの中では声がそろう）
     "kon": ("gemini-2.5-flash-preview-tts", "Fenrir", "生意気で自信満々なキツネの男の子の弁護士として、早口で、得意げに・悔しそうに感情たっぷりに言って"),
-    "pon": ("gemini-3.8-flash-lite-tts", "Achird", "子どもの味方の、明るくて頼れるパンダのお兄さん弁護士として、元気よく、ほめるように言って"),
+    "pon": ("gemini-2.5-flash-preview-tts", "Achird", "子どもの味方の、明るくて頼れるパンダのお兄さん弁護士として、元気よく、ほめるように言って"),
 }
 src = open(os.path.join(os.path.dirname(__file__), "tools-npc.py")).read()
 ns = {}
