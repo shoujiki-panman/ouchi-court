@@ -192,22 +192,56 @@ export const sfx = {
       get track() { return now; },
     };
   },
-  // 論破のガラスが割れる「パリーン」（高い音のかけらをばらまく）
-  glass(ctx) {
+  // 論破のガラスが割れる「パリーン」（高い音のかけらをばらまく）。vol で小さくできる（和風にしてからは腹鼓のあとに小さく 10/21）
+  glass(ctx, vol = 1) {
     const t = ctx.currentTime + 0.01;
-    hit(ctx, t, { freq: 5000, type: "highpass", decay: 0.5, gain: 0.6 });
+    hit(ctx, t, { freq: 5000, type: "highpass", decay: 0.5, gain: 0.6 * vol });
     for (let i = 0; i < 9; i++) {
       const o = ctx.createOscillator();
       o.type = "sine";
       o.frequency.value = 2200 + Math.random() * 3800;
       const g = ctx.createGain();
       const at = t + Math.random() * 0.25;
-      g.gain.setValueAtTime(0.06, at);
+      g.gain.setValueAtTime(0.06 * vol, at);
       g.gain.exponentialRampToValueAtTime(0.0001, at + 0.25);
       o.connect(g).connect(ctx.destination);
       o.start(at);
       o.stop(at + 0.3);
     }
+  },
+  // タヌキの腹鼓「ポン」：120Hz から 60Hz に落ちる sine ＋ 軽いノイズ（0.25秒）
+  pon(ctx) {
+    const t = ctx.currentTime + 0.01;
+    const o = ctx.createOscillator();
+    o.type = "sine";
+    o.frequency.setValueAtTime(120, t);
+    o.frequency.exponentialRampToValueAtTime(60, t + 0.25);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.9, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.25);
+    o.connect(g).connect(ctx.destination);
+    o.start(t);
+    o.stop(t + 0.27);
+    hit(ctx, t, { freq: 400, type: "lowpass", decay: 0.08, gain: 0.25 });
+  },
+  // 拍子木「カン、カン」：高い木の音を2回（各0.05秒、間0.12秒）
+  async clack(ctx) {
+    const t = ctx.currentTime + 0.01;
+    [0, 0.12].forEach((d) => {
+      const at = t + d;
+      const o = ctx.createOscillator();
+      o.type = "triangle";
+      o.frequency.value = 1900;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.35, at);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + 0.05);
+      o.connect(g).connect(ctx.destination);
+      o.start(at);
+      o.stop(at + 0.06);
+      hit(ctx, at, { freq: 2600, type: "bandpass", decay: 0.05, gain: 0.5 });
+    });
+    await wait(0.22);
   },
   // ルーレットの「カッ」
   tick(ctx) {

@@ -114,7 +114,12 @@ const api = async (path, body) => {
 // 舞台：立ち絵・名札・せりふの箱（1文字ずつ）
 let typing = Promise.resolve();
 let scene = 0; // 話し手が変わるたびに増やし、前の人の1文字ずつ表示を打ち切る
+// 節目の記録（デモ動画の字幕合わせ用。?debug のときだけ）
+// デモで文字から送った発言は、Live が書き起こしとして返してくることがあり二重に数えた（10/21）→ しばらく「聞こえた」を無視する
+let ignoreHeardUntil = 0;
+const evt = (kind, text = "") => window.__events?.push({ t: performance.now(), kind, text: String(text).slice(0, 80) });
 function onStage(id, text, { fresh = false } = {}) {
+  if (fresh) evt("stage", `${id}: ${text}`);
   const c = CAST[id];
   if (who !== id || fresh) {
     const changed = who !== id;
@@ -148,14 +153,15 @@ function onStage(id, text, { fresh = false } = {}) {
 const talk = (on) => $("hero").classList.toggle("talk", on);
 // コン太とポン子は、AIの司会とは別の声で、こちらから話させる（10/16「他のキャラが喋らない・切り替わらない」）
 // 声は AivisSpeech で作っておいた決めゼリフ（public/voice/）。ブラウザの読み上げは声が変だった（10/16）
-// 長いセリフは文字だけ出して、頭に短い決めゼリフの声を入れる（ダンガンロンパも一部だけ声が入る）
+// 長いセリフは文字だけ出して、頭に短い決めゼリフの声を入れる（法廷バトルも一部だけ声が入る）
 let npcTalking = false;
 const NPC_LINES = {
   lawyerD: { objection: "異議あり！", doukana: "それはどうかな？", chotto: "ちょっと待った！その意見には穴があるよ！", gunu: "ぐぬぬ……！そこを突かれるとは……！", iisugi: "くっ、今のはちょっと言いすぎたか……！", madamada: "まだまだ！次のラウンドで取り返してやる！", kuzurenai: "ふふん、ぼくの言い分は崩れないよ！", dousita: "どうした？撃ち抜けなかったみたいだね！", zannen: "残念！ぼくの勝ちが近づいてきたかな？", hantai: "でも、反対の理由だってちゃんとあるんだよ！", chigau: "本当にそうかな？ぼくはちがうと思うね！" },
-  lawyerP: { nice: "ナイス論破！バッチリ効いたね！", kimatta: "それは違うよ、決まったー！その調子！", sugoi: "すごい！コン太の弱いところ、ちゃんと見抜いたね！", daijoubu: "だいじょうぶ！次で取り返そう！", oshii: "おしい！黄色いところをよく見てね！", gyakuten: "まだ逆転できるよ、がんばって！" },
+  lawyerP: { nice: "ナイス論破！バッチリ効いたね！", kimatta: "決まったー！その調子！", sugoi: "すごい！コン太の弱いところ、ちゃんと見抜いたね！", daijoubu: "だいじょうぶ！次で取り返そう！", oshii: "おしい！黄色いところをよく見てね！", gyakuten: "まだ逆転できるよ、がんばって！" },
 };
 // key: 決めゼリフ（声あり）。text を渡すと、声は key、画面の文字は text
 function npcSay(id, key, text) {
+  evt("npc", `${id}: ${text ?? NPC_LINES[id][key]}`);
   const line = text ?? NPC_LINES[id][key];
   onStage(id, line, { fresh: true });
   note(CAST[id].name, line);
@@ -253,6 +259,7 @@ const closeNote = () => record.length && (record[record.length - 1].closed = tru
 
 // 異議あり！ ／ 待った！
 async function shout(word = "異議あり！") {
+  evt("shout", word);
   const el = $("shout");
   el.textContent = word;
   el.classList.toggle("gold", word.startsWith("閉廷"));
@@ -273,6 +280,7 @@ function flash() {
   $("flash").classList.add("on");
 }
 function stamp(text) {
+  evt("stamp", text);
   $("stamp").textContent = text;
   $("stamp").classList.remove("on");
   void $("stamp").offsetWidth;
@@ -379,6 +387,7 @@ async function openCourt(resume = false) {
           speaker.play(b64);
         },
         heard: (t) => {
+          if (Date.now() < ignoreHeardUntil) return;
 
           if (/論破|ろんぱ/.test(t)) ronpa();
           else if (/異議あり|いぎあり/.test(t)) {
@@ -467,6 +476,7 @@ function reply(call, result) {
   else live.send({ clientContent: { turns: [{ role: "user", parts: [{ text: `（${result}）` }] }], turnComplete: true } });
 }
 async function judge(call) {
+  evt("judge", call.id ? "ai" : "code");
   if (call.name !== "call_judge") return;
   // ひとりで挑戦の判決は、点数をつけ終えた画面だけが始める（書記官が先に呼ぶと最終ラウンドの点が入らない 10/16）
   if (mode === "solo" && call.id && !gameOver) {
@@ -675,6 +685,7 @@ async function showTitle() {
 
 // 罰ゲーム：一覧をルーレットで回して、判事の選んだものに止める。時間つきなら数える
 async function punishmentTime(p, who, imgPromise) {
+  evt("penalty", p.text);
   $("rTitle").textContent = "罰ゲーム";
   $("rImg").innerHTML = "";
   $("rWho").textContent = who ? `${who} の罰ゲームは……` : "罰ゲームは……";
@@ -716,6 +727,7 @@ const SOLO_STEPS = [["open", "開廷"], ["topic", "お題"], ["r1", "ラウン�
 let STEPS = SOLO_STEPS;
 let stepNow = -1;
 function step(id) {
+  evt("step", id);
   const i = STEPS.findIndex(([k]) => k === id);
   if (i < stepNow) return; // 戻らない
   stepNow = i;
@@ -948,10 +960,12 @@ async function soloPoint(r, statement) {
     end = "試合終了！「勝負あり！」とだけ言ってください（判決はこちらで始めます）。";
     shout("勝負あり！");
     gameOver = true;
+    clearInterval(soloClock);
+    $("feverClock").textContent = "";
     setTimeout(() => judge({ name: "call_judge", id: null, args: {} }), 1500);
   }
   step(end.startsWith("試合終了") ? "verdict" : `r${Math.min(rounds + 1, 3)}`);
-  // 次のラウンドの前に：コン太が言い返す（ノンストップ議論があれば画面で撃ち抜く）→ ポン子がひとこと → 司会が次へ
+  // 次のラウンドの前に：コン太が言い返す（論破タイムがあれば画面で撃ち抜く）→ ポン子がひとこと → 司会が次へ
   const debateNext = !end && bullets.length > 0;
   const nextCue = `「ラウンド${rounds + 1}！」${rounds + 1 === 3 ? "（最終ラウンド！得点2倍と言って煽る）" : ""}`;
   live?.send({ clientContent: { turns: [{ role: "user", parts: [{ text: `（ラウンド${rounds}の採点: 子ども+${me}（${parts.join("・")}）、コン太+${rival}。合計 あなた${soloScore.player} - ${soloScore.rival}コン太。理由「${r.why}」。${end || "実況は1文だけ。このあとコン太とポン子が話す（画面が話す）ので、知らせが来るまで黙って待つ。"}）` }] }], turnComplete: true } });
@@ -961,7 +975,7 @@ async function soloPoint(r, statement) {
   if (d?.lines?.length) {
     const out = await nonstopDebate(d);
     if (out.hit) {
-      await npcSay("lawyerP", pick(["nice", "kimatta", "sugoi"]));
+      await npcSay("lawyerP", pick(["nice", "sugoi"])); // kimatta は声を作り直すまで外す
       await npcSay("lawyerD", pick(["gunu", "iisugi", "madamada"]));
     } else {
       await npcSay("lawyerD", pick(["kuzurenai", "dousita", "zannen"]));
@@ -989,8 +1003,8 @@ function showHintCards() {
   row.innerHTML = `<span class="lbl">🃏 証拠品（ヒントカード）</span>` + bullets.map((b) => `<span class="hc" title="${b.text}"><b>${b.name}</b>${b.text}</span>`).join("");
   $("topicCard").append(row);
 }
-// ── ノンストップ議論（ダンガンロンパ） ──
-// 相手のセリフが流れる → 黄色いウィークポイントのうち本物を、合うコトダマで撃ち抜くと「論破」
+// ── 論破タイム（法廷バトル風の反論シーン） ──
+// 相手のセリフが流れる → 黄色いウィークポイントのうち本物を、合う証拠カードで撃ち抜くと「論破」
 let bullets = [], selBullet = 0;
 function drawCylinder(on) {
   $("kotodama").innerHTML = bullets.map((b, i) => `<button class="kd ${i === selBullet ? "sel" : ""}" data-i="${i}"><b>${b.name}</b><small>${b.text}</small></button>`).join("");
@@ -1002,11 +1016,12 @@ function drawCylinder(on) {
   }));
 }
 async function nonstopDebate(d) {
+  evt("debate", d.lines[0]?.text);
   selBullet = 0;
   $("stage").classList.add("debate");
-  await banner("ノンストップ議論 開始！");
+  await banner("論破タイム 開始！");
   drawCylinder(true);
-  npcSay("lawyerD", pick(["chotto", "doukana", "objection"]), d.lines[0].text).then(() => onStage("lawyerD", "コトダマを選んで、黄色いウィークポイントを撃ち抜け！", { fresh: true }));
+  npcSay("lawyerD", pick(["chotto", "doukana", "objection"]), d.lines[0].text).then(() => onStage("lawyerD", "証拠カードを選んで、ほころび（朱の文字）を撃ち抜け！", { fresh: true }));
   heat(25);
   let done, missed = 0;
   const finish = new Promise((r) => (done = r));
@@ -1046,7 +1061,7 @@ async function nonstopDebate(d) {
     breakdown.ronpa += pts;
     ronpaCount++;
     showSoloScore();
-    await cutIn("それは違うよ！");
+    await cutIn("そこ、おかしいよ！");
     hit.el.classList.add("hit");
     await breakGlass();
     score(pts * 100, "論破");
@@ -1059,30 +1074,35 @@ async function nonstopDebate(d) {
   $("stage").classList.remove("debate");
   return out;
 }
-// 「それは違うよ！」の斜めの帯
+// 「そこ、おかしいよ！」の巻物（中央から広がって、巻き戻る）。「！」だけ朱にする
 async function cutIn(word) {
+  evt("cutin", word);
   const el = $("cutin");
-  el.querySelector("span").textContent = word;
+  el.querySelector("span").innerHTML = word.replace(/[&<>]/g, "").replace(/！/g, "<em>！</em>");
   el.classList.remove("on");
   void el.offsetWidth;
   el.classList.add("on");
   speedLines();
   flash();
+  // 拍子木（カン、カン）→ ジャン！。合計の長さは前と同じ（0.22 + 0.5 + 0.68 秒）
+  await sfx.clack(speaker.ctx);
   await sfx.objection(speaker.ctx);
-  await new Promise((r) => setTimeout(r, 900));
+  await new Promise((r) => setTimeout(r, 680));
 }
-// 論破のガラスが割れる演出
+// 論破の演出：和紙が破れて、朱の判子が押される（関数名は昔のまま）
 async function breakGlass() {
   const g = $("glass");
   g.innerHTML = Array.from({ length: 14 }, () => {
     const x = Math.random() * 100, y = Math.random() * 100;
     const pts = Array.from({ length: 3 }, () => `${x + (Math.random() - 0.5) * 50}% ${y + (Math.random() - 0.5) * 50}%`).join(",");
     return `<i style="clip-path: polygon(${pts}); --dx: ${(Math.random() - 0.5) * 140}%; --dy: ${(Math.random() - 0.3) * 140}%; --r: ${(Math.random() - 0.5) * 540}deg"></i>`;
-  }).join("") + `<b class="display">論破！</b>`;
+  }).join("") + `<b class="display">論破</b>`;
   g.classList.remove("on");
   void g.offsetWidth;
   g.classList.add("on");
-  sfx.glass(speaker.ctx);
+  // タヌキの腹鼓（ポン）→ 紙の破れる音を小さく
+  sfx.pon(speaker.ctx);
+  setTimeout(() => sfx.glass(speaker.ctx, 0.35), 160);
   speaker?.clip("crowd/oo.mp3", 0.6);
   react("ronpa");
   heat(30);
@@ -1118,10 +1138,12 @@ function coach(text) {
 
 // 段の掲示：議論タイム・証拠品タイム
 function banner(text) {
+  evt("banner", text);
   $("banner").textContent = text;
   $("banner").classList.remove("on");
   void $("banner").offsetWidth;
   $("banner").classList.add("on");
+  if (speaker) sfx.clack(speaker.ctx);
   speaker?.clip("crowd/zawa.mp3", 0.5);
   return new Promise((r) => setTimeout(r, 1400));
 }
@@ -1153,7 +1175,7 @@ async function adjourn() {
     const c = document.createElement("div");
     c.className = "confetti";
     c.style.left = `${Math.random() * 100}%`;
-    c.style.background = ["#ff2d8a", "#ffd23f", "#8b3dff", "#fff"][i % 4];
+    c.style.background = ["#e4532b", "#1f4e79", "#f1e7d0", "#e4532b"][i % 4];
     c.style.animationDelay = `${Math.random() * 0.8}s`;
     $("stage").append(c);
     setTimeout(() => c.remove(), 3600);
@@ -1166,6 +1188,7 @@ async function adjourn() {
 
 // 結果カード（ひとりで挑戦）：お題・勝ち負け・スコア・いちばん良かった一言・コーチの総評・コン太の一言
 async function resultCard(result, v) {
+  evt("result", result);
   const rv = rivalInfo;
   const newBadges = earnBadges(result);
   // 試合の記録をこの端末に残す（タイトルの「これまでの試合」に出る）
@@ -1240,7 +1263,7 @@ function download(blob, name) {
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
-// 挑戦状の画像（1200×630。Xのカードの大きさ）。ダンガンロンパ風：集中線・太い縁取りの文字・キャラの切り抜き
+// 挑戦状の画像（1200×630。Xのカードの大きさ）。墨の地・太い縁取りの文字・キャラの切り抜き。斜めと集中線はやめた（10/21「ダンガンロンパすぎる」）
 async function shareImage(title, url) {
   try {
     // 文字ごとにフォントの分割ファイルが読まれるので、使う文字を全部渡して読み込む（「完」だけ別の字体になった）
@@ -1269,27 +1292,10 @@ async function shareImage(title, url) {
       g.fillStyle = fill;
       g.fillText(t, x, y);
     };
-    // 背景：黒地にピンクの集中線（左の見出しから広がる）
-    g.fillStyle = "#120717";
+    // 背景：墨の地だけ（集中線と光はやめた 10/21「ダンガンロンパすぎる」）
+    g.fillStyle = "#15110e";
     g.fillRect(0, 0, W, H);
-    g.save();
-    g.translate(380, 250);
-    for (let i = 0; i < 48; i++) {
-      g.rotate((Math.PI * 2) / 48);
-      g.fillStyle = i % 2 ? "rgba(255,79,163,.28)" : "rgba(138,63,252,.18)";
-      g.beginPath();
-      g.moveTo(0, 0);
-      g.lineTo(1400, -40);
-      g.lineTo(1400, 40);
-      g.fill();
-    }
-    g.restore();
-    const glow = g.createRadialGradient(380, 250, 20, 380, 250, 420);
-    glow.addColorStop(0, "rgba(255,79,163,.55)");
-    glow.addColorStop(1, "rgba(18,7,23,0)");
-    g.fillStyle = glow;
-    g.fillRect(0, 0, W, H);
-    // 右：コン太（ピンクの光を背負う）
+    // 右：コン太
     const kon = await new Promise((r) => {
       const i = new Image();
       i.onload = () => r(i);
@@ -1297,52 +1303,47 @@ async function shareImage(title, url) {
       i.src = "img/lawyerD.png";
     });
     if (kon) {
-      g.save();
-      g.shadowColor = "#ff4fa3";
-      g.shadowBlur = 40;
       g.drawImage(kon, 790, 90, 420, 420);
-      g.restore();
     }
     // 左上：小さな看板
-    g.fillStyle = "#ff4fa3";
+    g.fillStyle = "#e4532b";
     g.beginPath();
-    g.moveTo(40, 30);
-    g.lineTo(430, 30);
-    g.lineTo(410, 92);
-    g.lineTo(20, 92);
+    g.moveTo(40, 32);
+    g.lineTo(440, 32);
+    g.lineTo(440, 96);
+    g.lineTo(40, 96);
     g.fill();
-    outline("おうち裁判 挑戦状", 48, 78, 40, "#fff", { stroke: "#000" });
-    // 中央：判決の文字（大きく・斜め）
+    outline("おうち裁判 挑戦状", 48, 78, 40, "#f1e7d0", { stroke: "#000" });
+    // 中央：判決の文字（大きく）
     g.save();
     g.translate(400, 270);
-    g.rotate(-0.1);
     // 長い判決（完全論破！など）は幅に合わせて小さくする
     let px = 150;
     g.font = font(px);
     while (px > 70 && g.measureText(title).width > 640) g.font = font((px -= 6));
-    outline(title, 0, 0, px, "#fff", { shadow: "#ff4fa3", align: "center" });
+    outline(title, 0, 0, px, "#e6b422", { align: "center" });
     g.restore();
-    // 下：黒い斜めの帯に点数とお題
-    g.fillStyle = "#000";
+    // 下：黒い帯に点数とお題
+    g.fillStyle = "#0e0b09";
     g.beginPath();
     g.moveTo(0, 400);
-    g.lineTo(W, 360);
+    g.lineTo(W, 400);
     g.lineTo(W, H);
     g.lineTo(0, H);
     g.fill();
-    g.fillStyle = "#ff4fa3";
+    g.fillStyle = "#e4532b";
     g.fillRect(0, 396, W, 6);
-    outline(`あなた ${soloScore.player} - ${soloScore.rival} コン太`, 50, 470, 54, "#fff", { stroke: "#000" });
+    outline(`あなた ${soloScore.player} - ${soloScore.rival} コン太`, 50, 470, 54, "#e6b422", { stroke: "#000" });
     g.font = font(30);
     g.textAlign = "left";
-    g.fillStyle = "#ffd23f";
+    g.fillStyle = "#f1e7d0";
     const t = `お題「${topic?.motion ?? ""}」`;
     g.fillText(t.length > 30 ? `${t.slice(0, 29)}…」` : t, 50, 530);
-    g.fillStyle = "#fff";
+    g.fillStyle = "#f1e7d0";
     g.fillText(`【${side}】派の ${soloScore.player}点、超えられる？`, 50, 580);
     g.font = "22px sans-serif";
     g.textAlign = "right";
-    g.fillStyle = "#c9b8e0";
+    g.fillStyle = "rgba(241,231,208,.68)";
     g.fillText(url.replace(/^https?:\/\//, "").split("?")[0], W - 30, H - 24);
     return await new Promise((r) => c.toBlob(r, "image/png"));
   } catch {
@@ -1367,6 +1368,7 @@ function earnShareBadge() {
 }
 // 投票タイム：3人の判事の票をスロットで回して、1つずつ止める
 async function voteTime(panel) {
+  evt("vote", panel.map((p) => p.vote).join("/"));
   $("reels").innerHTML = panel.map((p, i) => `<div class="reel spin" id="reel${i}"><small>${p.title}</small><div class="val display">？？？</div><div class="why"></div></div>`).join("");
   $("vote").classList.add("on");
   const names = [...new Set(panel.map((p) => p.vote))];
@@ -1411,7 +1413,7 @@ async function investigateCall(call) {
       evidence.push({ label, dataUrl: url });
       live.send({ realtimeInput: { video: { data: r.image, mimeType: "image/jpeg" } } });
     } else {
-      card.innerHTML = `<div style="padding:6px;text-align:left;font-size:.68rem">🔍 ${r.finding}${r.sources?.length ? `<br><a href="${r.sources[0].url}" target="_blank" style="color:#ffd23f">出典：${r.sources[0].title}</a>` : ""}</div><div>${label}</div>`;
+      card.innerHTML = `<div style="padding:6px;text-align:left;font-size:.68rem">🔍 ${r.finding}${r.sources?.length ? `<br><a href="${r.sources[0].url}" target="_blank" style="color:#f1e7d0">出典：${r.sources[0].title}</a>` : ""}</div><div>${label}</div>`;
       evidence.push({ label: `${label}（${r.finding}）` });
     }
     $("evidence").append(card);
@@ -1610,7 +1612,7 @@ $("solo").onclick = async () => {
       topic = chosen;
       side = b.dataset.s;
       try {
-        // コトダマ（証拠のカード）を3つ配る。ノンストップ議論で撃つ弾
+        // 証拠カード（証拠のカード）を3つ配る。論破タイムで撃つ弾
         api("/api/kotodama", { topic: topic.motion, side, detail: topic.detail ?? topic.background, pro: topic.pro, con: topic.con })
           .then((k) => {
             bullets = k.bullets ?? [];
@@ -1661,8 +1663,38 @@ $("pass").oninput = () => localStorage.setItem("ouchi-court-pass", $("pass").val
 
 // 確かめ用（?debug のときだけ）：声の代わりに文字で発言する
 if (new URLSearchParams(location.search).has("debug")) {
+  window.__events = [];
   window.__court = {
+    // 子ども役の声（mp3）を流し、流し終わってから発言として送る（デモ動画用）
+    speak(text, url) {
+      evt("child", text);
+      onStage("witness", text, { fresh: true });
+      return new Promise((done) => {
+        const a = new Audio(url);
+        a.onended = a.onerror = () => {
+          ignoreHeardUntil = Date.now() + 15000;
+          flyStatement(text);
+          note("証言台", text);
+          closeNote();
+          live.send({ clientContent: { turns: [{ role: "user", parts: [{ text }] }], turnComplete: true } });
+          done();
+        };
+        a.play().catch(() => a.onended());
+      });
+    },
+    async showShare(ms = 4500) {
+      const url = URL.createObjectURL(await shareImage(document.querySelector("#result .rt")?.textContent || "勝訴！", location.origin));
+      const el = document.createElement("div");
+      el.id = "sharePreview";
+      el.innerHTML = `<img src="${url}" alt="">`;
+      $("stage").append(el);
+      evt("share", "");
+      await new Promise((r) => setTimeout(r, ms));
+      el.remove();
+    },
+    events: () => window.__events,
     say(text) {
+      ignoreHeardUntil = Date.now() + 15000;
       flyStatement(text);
       onStage("witness", text, { fresh: true });
       note("証言台", text);
@@ -1676,7 +1708,7 @@ if (new URLSearchParams(location.search).has("debug")) {
       topic = { motion: t };
       return URL.createObjectURL(await shareImage(title, location.origin));
     },
-    cut: async () => { await cutIn("それは違うよ！"); await breakGlass(); },
+    cut: async () => { await cutIn("そこ、おかしいよ！"); await breakGlass(); },
     state: () => ({ myTurn, turnLeft, connected: live?.ws?.readyState, mode, ...dbg }),
   };
 }
