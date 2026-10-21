@@ -368,11 +368,34 @@
   #vote h2 { font-size: 2.6rem; color: #fff; -webkit-text-stroke: 2px #000; text-shadow: 4px 4px 0 var(--pink); transform: skewX(-8deg); }
   .reel { border: 4px solid #000; outline: 3px solid var(--gold); border-radius: 6px; background: linear-gradient(#2a0f3d, #12061c); box-shadow: 0 0 18px rgba(255,210,63,.35); }
   .reel .val { color: #fff; -webkit-text-stroke: 1px #000; text-shadow: 2px 2px 0 var(--pink); }
+  /* ── 引き算（10/21「もっと洗練させて無駄を削ぎ落とす」）：消すだけ。色・形は上のまま ── */
+  #steps { display: none; }
+  #score { display: none !important; }
+  #objection { display: none !important; }
+  /* 大きいボタンの列は、再開するが出ているときだけ */
+  .controls.main:not(:has(#resume[style*="inline-block"])) { display: none; }
+  /* 状態の一行は、エラーのときだけ */
+  #status { display: none; margin: 8px 0 0; min-height: 0; }
+  #status.err { display: block; }
+  /* 余白は 8px か 16px にそろえる */
+  h1 { margin: 0; }
+  header { margin-bottom: 8px; }
+  #topicCard { margin: 0 0 8px; }
+  #stage { margin: 0; }
+  .controls.main, .controls.small { margin-top: 8px; }
+  footer { margin-top: 16px; }
+  /* 証拠カードは名前だけの小さいチップを1列に（説明は title） */
+  #hintCards { flex-wrap: nowrap; gap: 8px; margin-top: 8px; overflow-x: auto; }
+  #hintCards button.hc { white-space: nowrap; max-width: none; flex: none; }
+  #hintCards .hc b { margin-right: 0; font-size: inherit; }
+  /* 消した段の分だけ舞台を高くする（ひとりで挑戦はお題の帯の分を引く） */
+  body.versus #stage { height: clamp(340px, calc(100dvh - 200px), 560px); }
+  body.solo #stage { height: clamp(340px, calc(100dvh - 250px), 560px); }
 </style>
 </head>
 <body>
 <main>
-  <header><h1 class="display">おうち裁判</h1><span class="sub">AIライバルと3分ディベート</span></header>
+  <header><h1 class="display">おうち裁判</h1></header>
 
   <div id="steps"></div>
   <div id="topicCard"></div>
@@ -400,12 +423,10 @@
     <div id="paused" class="display">⏸ 一時停止中</div>
     <div id="intro">
       <div class="logo display">おうち裁判</div>
-      <div class="tag">AIライバルと 3分ディベートバトル</div>
       <div class="rivalCard"><img src="img/lawyerD.png" alt=""><div><b class="display">ライバル コン太</b><span id="rivalLine">はじめての対決！</span></div></div>
       <div id="badgeShelf"></div>
       <button id="solo" class="big display"><span>🎤 ひとりで挑戦</span></button>
       <button id="open" class="versusBtn display"><span>🆚 ふたりで対戦（けんかの裁判）</span></button>
-      <div class="how">お題に「賛成」か「反対」で意見を言おう。理由・具体例・反論で点が入る！</div>
     </div>
     <div id="topics"></div>
     <div id="flash"></div>
@@ -419,8 +440,8 @@
   </div>
   <div class="controls small">
     <button id="evidenceBtn" class="mini" disabled>📷 証拠品</button>
-    <button id="pauseBtn" class="mini" disabled><span>⏸ 一時停止</span></button>
-    <button id="close" class="mini" disabled>✕ 閉廷</button>
+    <button id="pauseBtn" class="mini" disabled title="一時停止" aria-label="一時停止"><span>⏸</span></button>
+    <button id="close" class="mini" disabled title="閉廷" aria-label="閉廷">✕</button>
     <button id="verdictBtn" class="mini" disabled style="display:none"><span>⚖️ 判決へ</span></button>
     <input id="pass" type="password">
   </div>

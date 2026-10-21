@@ -92,7 +92,10 @@ const CAST = {
 // ふたりで対戦は、天秤（原告=左・ピンク／被告=右・青）にそろえて 左=原告側（ポン子・原告）、右=被告側（コン太・被告）。証言台は出さない
 const SEATS = {
   solo: { judge: [50, 3], bailiff: [15, 14], lawyerP: [85, 14], lawyerD: [14, 44], witness: [86, 44] },
-  versus: { judge: [50, 3], bailiff: [33, 3], lawyerP: [15, 14], plaintiff: [14, 38], lawyerD: [85, 14], defendant: [86, 38] },
+  // 書記官は左上の外側。弁護人と原告・被告の上下は舞台の高さの 30% あける。立ち絵（中央）と名札（左下）にかからない位置
+  versus: { judge: [50, 3], bailiff: [9, 9], lawyerP: [22, 22], plaintiff: [22, 52], lawyerD: [78, 22], defendant: [78, 52] },
+  // スマホ（幅 560px 以下）は立ち絵が幅の半分以上あるので、席を左右の端に寄せる
+  versusNarrow: { judge: [50, 3], bailiff: [15, 8], lawyerP: [15, 24], plaintiff: [15, 54], lawyerD: [90, 24], defendant: [90, 54] },
 };
 for (const id of ["judge", "bailiff", "lawyerP", "lawyerD", "witness", "plaintiff", "defendant"]) {
   const el = document.createElement("div");
@@ -102,7 +105,7 @@ for (const id of ["judge", "bailiff", "lawyerP", "lawyerD", "witness", "plaintif
   document.getElementById("stage").append(el);
 }
 function layoutSeats(m) {
-  const pos = SEATS[m === "solo" ? "solo" : "versus"];
+  const pos = SEATS[m === "solo" ? "solo" : innerWidth <= 560 ? "versusNarrow" : "versus"];
   document.querySelectorAll(".seat").forEach((el) => {
     const p = pos[el.id.slice(5)];
     el.style.display = p ? "" : "none";
@@ -264,7 +267,11 @@ async function ronpa(statement = lastStatement, el) {
   live.send({ clientContent: { turns: [{ role: "user", parts: [{ text: `（だれかが「${statement}」という発言に「論破！」と言いました。どこがおかしいと思ったのか、論破した人に名前と理由を聞いてください）` }] }], turnComplete: true } });
   note("論破", statement);
 }
-const status = (t) => ($("status").textContent = t);
+// 状態の一行は、エラーのときだけ出す（ふだんの「開廷中」などは画面に出さない 10/21）
+const status = (t, err = false) => {
+  $("status").textContent = t;
+  $("status").classList.toggle("err", err);
+};
 function note(whoName, text) {
   const last = record[record.length - 1];
   if (last && last.who === whoName && !last.closed) last.text += text;
@@ -400,7 +407,7 @@ async function openCourt(resume = false) {
             });
             status("開廷中：そのまま話しかけてください");
           } catch (e) {
-            status(`マイクが使えません（${e.message}）。ブラウザのマイクの許可を確かめてください。`);
+            status(`マイクが使えません（${e.message}）。ブラウザのマイクの許可を確かめてください。`, true);
           }
           ["close", "objection", "evidenceBtn", "ronpa", "verdictBtn", "pauseBtn"].forEach((id) => ($(id).disabled = false));
         },
@@ -487,14 +494,14 @@ async function openCourt(resume = false) {
         closed: (e) => {
           if (userClosed) return status("閉廷しました");
           beat?.loud(false);
-          status(`接続が切れました（${e?.code ?? ""} ${e?.reason ?? ""}）。「再開する」で続きから始められます。`);
+          status(`接続が切れました（${e?.code ?? ""} ${e?.reason ?? ""}）。「再開する」で続きから始められます。`, true);
           $("resume").style.display = "inline-block";
         },
-        error: (m) => status(m),
+        error: (m) => status(m, true),
       },
     });
   } catch (e) {
-    status(`開廷できませんでした: ${e.message}`);
+    status(`開廷できませんでした: ${e.message}`, true);
     $("open").disabled = false;
   }
 }
@@ -603,7 +610,7 @@ async function judge(call) {
     reply(call, `裁判長がたった今、判決を読み上げた（書記官は判決をくり返さないこと）。罰ゲーム: ${v.who ?? ""}「${v.punishment?.text ?? v.sentence}」（画面でもう発表して、やり終えた）。書記官は、罰や仲直りが今できているかを名前を呼んで楽しく確かめてから「これにて閉廷！」と締める。`);
   } catch (e) {
     drum.stop();
-    status(`判事が来られませんでした: ${e.message}`);
+    status(`判事が来られませんでした: ${e.message}`, true);
     reply(call, "判事が不在。書記官が代わりに、二人に仲直りの握手をすすめて閉廷する。");
   } finally {
     judging = false;
@@ -804,7 +811,9 @@ function togglePause() {
   if (!live) return;
   paused = !paused;
   $("paused").classList.toggle("on", paused);
-  $("pauseBtn").querySelector("span").textContent = paused ? "▶ 再開" : "⏸ 一時停止";
+  $("pauseBtn").querySelector("span").textContent = paused ? "▶" : "⏸";
+  $("pauseBtn").title = paused ? "再開" : "一時停止";
+  $("pauseBtn").setAttribute("aria-label", $("pauseBtn").title);
   if (paused) {
     speaker?.stop();
     beat?.pause?.();
@@ -905,14 +914,8 @@ function earnBadges(result) {
 function showShelf() {
   const have = store.get("ouchi.badges", []);
   const next = BADGES.find((b) => !have.includes(b.id));
-  $("badgeShelf").innerHTML = BADGES.map((b) => `<span class="b ${have.includes(b.id) ? "" : "off"}" title="${b.name}：${b.how}">${have.includes(b.id) ? b.icon : "？"}</span>`).join("") +
-    `<div class="next">バッジ ${have.length}/${BADGES.length}${next ? `｜つぎ：${next.icon} ${next.how}` : "｜ぜんぶ集めた！"}</div>`;
-  const hist = store.get("ouchi.history", []);
-  if (hist.length)
-    $("badgeShelf").innerHTML += `<details class="hist"><summary>📜 これまでの試合（${hist.length}回）</summary>${hist
-      .slice(0, 8)
-      .map((h) => `<div>${new Date(h.at).toLocaleDateString("ja-JP")} ${{ win: "🏆", lose: "💧", draw: "🤝" }[h.result] ?? ""} ${h.me}-${h.rival}｜${h.topic}（${h.side}）</div>`)
-      .join("")}</details>`;
+  // タイトルはバッジの1行（「バッジ 5/13｜つぎ：…」）だけ。アイコンの列と試合の記録は出さない（10/21）
+  $("badgeShelf").innerHTML = `<div class="next">バッジ ${have.length}/${BADGES.length}${next ? `｜つぎ：${next.icon} ${next.how}` : "｜ぜんぶ集めた！"}</div>`;
 }
 showShelf();
 function showSoloScore() {
@@ -1083,7 +1086,8 @@ function showHintCards() {
   if (!bullets.length || mode !== "solo") return;
   const row = document.createElement("div");
   row.id = "hintCards";
-  row.innerHTML = `<span class="lbl">🃏 証拠品（ヒントカード）</span>` + bullets.map((b, i) => `<button type="button" class="hc" data-i="${i}" title="${b.text}"><b>${b.name}</b>${b.text}</button>`).join("");
+  // 名前だけの小さいチップ（説明は title）
+  row.innerHTML = bullets.map((b, i) => `<button type="button" class="hc" data-i="${i}" title="${b.text}"><b>${b.name}</b></button>`).join("");
   $("topicCard").append(row);
   // 押せる（10/21「カードをクリックしても押せない」）。論破タイム中は、舞台の証拠カードを選んだのと同じになる
   row.querySelectorAll(".hc").forEach((el) => (el.onclick = () => {
