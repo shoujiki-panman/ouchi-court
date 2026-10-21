@@ -391,6 +391,13 @@
   /* 消した段の分だけ舞台を高くする（ひとりで挑戦はお題の帯の分を引く） */
   body.versus #stage { height: clamp(340px, calc(100dvh - 200px), 560px); }
   body.solo #stage { height: clamp(340px, calc(100dvh - 250px), 560px); }
+  /* スマホで点数バーが縦に折れる・ロゴが2行に割れるのを直す（10/22） */
+  #soloScore { white-space: nowrap; }
+  h1 { white-space: nowrap; }
+  @media (max-width: 560px) {
+    #soloScore { gap: 6px; padding: 2px 10px; font-size: .78rem; }
+    #soloScore small { display: none; }
+  }
 </style>
 </head>
 <body>
