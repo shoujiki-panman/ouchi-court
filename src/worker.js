@@ -459,10 +459,13 @@ async function opponent(env, { topic, side, record, last, level = 1 }) {
       "@cf/mistralai/mistral-small-3.1-24b-instruct",
       `お題「${topic}」で、子どもは「${side}」側。あなたは反対側の弁護人コン太。子どもの最新の発言に、理由がない・決めつけ・前と食い違う などの弱い所があれば「異議あり！」で短く反論する。よい理由が言えていたら割り込まない。` +
         `argument は、この発言がお題についての意見や理由になっているか（「わかった」「はい」「賛成で戦う」など返事・名前・あいさつだけなら false）。` +
-        `strength は意見の説得力（0=理由なし・「なんとなく」〜3=とても説得力がある。理由が1つでもちゃんと言えていれば2、具体例や比べ方まであれば3）。子どもにはやさしめに採点する。reason は判定の一言（子ども向けに20字以内）。` +
-        `example は具体例（自分の体験・数字・比べ方など）を入れていたら true。countered は、コン太が直前に言った反論にちゃんと答えていたら true。repeat は、これまでに自分が言った理由とほぼ同じなら true。` +
+        `claim は、お題について賛成か反対かの立場がはっきり言えていたら true。reason は、「〜から」「〜ので」「なぜなら」のように、なぜそう言えるのかの理由が1つ以上あれば true（同じことの言い換えや「好き」「いいと思う」など感想だけなら false）。ontopic は、お題と関係のある話なら true。` +
+        `strength は理由の強さを厳しく採点する：0=理由がない・お題と関係ない、1=理由はあるが一言だけ、2=理由がはっきりしていて、なぜそうなるかの筋道がある、3=はっきりした理由に加えて具体例か比べ方がある。理由のない主張に点をやらない（reason が false なら strength は 0）。` +
+        (level >= 3 ? `コン太はレベル${level}なので、決めつけ（「絶対」「みんな」「いつも」など）や、言いっぱなしで筋道がないものは strength を1下げる。` : "") +
+        `why は判定の一言（子ども向けに20字以内）。` +
+        `example は具体例（自分の体験・数字・比べ方など）を入れていたら true。countered は、コン太が直前に言った反論にちゃんと答えていたら true（コン太の反論がまだ無いときは false）。repeat は、これまでに自分が言った理由とほぼ同じなら true。` +
         `hint は味方のコーチ「ポン子」の一言：まず良い所を1つほめてから、もっと強くなる言い方を1つだけ（例を入れて40字以内）。コン太の強さはレベル${level}（レベルが上がるほど line の反論を鋭くする）。` +
-        '出力は JSON だけ: {"argument": true か false, "object": true か false, "line": "異議あり！から始まる40字以内", "strength": 0, "example": false, "countered": false, "repeat": false, "reason": "...", "hint": "..."}',
+        '出力は JSON だけ: {"argument": true か false, "claim": true か false, "reason": true か false, "ontopic": true か false, "object": true か false, "line": "異議あり！から始まる40字以内", "strength": 0, "example": false, "countered": false, "repeat": false, "why": "...", "hint": "..."}',
       `これまで:\n${record}\n\n子どもの最新の発言: ${last}`,
     ),
     12000,
@@ -474,8 +477,14 @@ async function opponent(env, { topic, side, record, last, level = 1 }) {
   // ライバルが強くなるほど、ポイントに要る説得力が上がる（レベル4から3が要る）
   const point = !isArg ? null : strength >= (level >= 4 ? 3 : 2) ? "player" : "rival";
   const hint = String(v?.hint ?? "").slice(0, 60);
-  const why = String(v?.reason ?? (point === "player" ? "理由がしっかりしてる！" : "理由がもう少しほしい")).slice(0, 30);
-  const flags = { example: v?.example === true || v?.example === "true", countered: v?.countered === true || v?.countered === "true", repeat: v?.repeat === true || v?.repeat === "true" };
+  const why = String(v?.why ?? (point === "player" ? "理由がしっかりしてる！" : "理由がもう少しほしい")).slice(0, 30);
+  // true/false の取り出し（"true" の文字も受ける）。答えが無いとき（採点の失敗など）は d にする
+  const yes = (x, d = false) => (x === true || x === "true" ? true : x === false || x === "false" ? false : d);
+  const flags = {
+    example: yes(v?.example), countered: yes(v?.countered), repeat: yes(v?.repeat),
+    // 採点に失敗したときに子どもを0点にしないよう、ここだけは「ある」側に倒す
+    claim: yes(v?.claim, isArg), reason: yes(v?.reason, strength >= 1), ontopic: yes(v?.ontopic, true),
+  };
   if (!v?.object || !v?.line) return { id: null, sway, point, why, hint, strength, isArg, ...flags };
   const line = String(v.line).startsWith("異議あり") ? String(v.line) : `異議あり！${v.line}`;
   return { id: "lawyerD", name: "弁護人コン太", line: line.slice(0, 60), sway, point, why, hint, strength, isArg, ...flags };

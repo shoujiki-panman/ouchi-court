@@ -82,20 +82,36 @@ const CAST = {
   lawyerP: { img: "img/lawyerP.jpg", name: "弁護人ポン子" },
   lawyerD: { img: "img/lawyerD.jpg", name: "弁護人コン太" },
   witness: { img: "img/witness.jpg", name: "証言台" },
+  // ふたりで対戦のけんかした2人。絵は証言台の子どもを使い回し、輪の色で区別する（名前が分かったら名札に足す）
+  plaintiff: { img: "img/witness.jpg", name: "原告" },
+  defendant: { img: "img/witness.jpg", name: "被告" },
   detective: { img: "img/detective.jpg", name: "調査官ホー" },
 };
 
-// 円形の法廷に席を並べる（裁判長が上、まわりに書記官・弁護人・証言台）
-const SEATS = { judge: [50, 3], bailiff: [15, 14], lawyerP: [85, 14], lawyerD: [14, 44], witness: [86, 44] }; // 調査官ホーは呼ばれたときだけ中央に出る
-for (const [id, [x, y]] of Object.entries(SEATS)) {
+// 円形の法廷に席を並べる（裁判長が上、まわりに書記官・弁護人・証言台）。調査官ホーは呼ばれたときだけ中央に出る
+// ふたりで対戦は、天秤（原告=左・ピンク／被告=右・青）にそろえて 左=原告側（ポン子・原告）、右=被告側（コン太・被告）。証言台は出さない
+const SEATS = {
+  solo: { judge: [50, 3], bailiff: [15, 14], lawyerP: [85, 14], lawyerD: [14, 44], witness: [86, 44] },
+  versus: { judge: [50, 3], bailiff: [33, 3], lawyerP: [15, 14], plaintiff: [14, 38], lawyerD: [85, 14], defendant: [86, 38] },
+};
+for (const id of ["judge", "bailiff", "lawyerP", "lawyerD", "witness", "plaintiff", "defendant"]) {
   const el = document.createElement("div");
   el.className = "seat";
   el.id = `seat-${id}`;
-  el.style.left = `calc(${x}% - 37px)`;
-  el.style.top = `${y}%`;
   el.innerHTML = `<div class="ring"><img src="${CAST[id].img}" alt=""></div><span>${CAST[id].name}</span>`;
   document.getElementById("stage").append(el);
 }
+function layoutSeats(m) {
+  const pos = SEATS[m === "solo" ? "solo" : "versus"];
+  document.querySelectorAll(".seat").forEach((el) => {
+    const p = pos[el.id.slice(5)];
+    el.style.display = p ? "" : "none";
+    if (!p) return;
+    el.style.left = `calc(${p[0]}% - 37px)`;
+    el.style.top = `${p[1]}%`;
+  });
+}
+layoutSeats("solo");
 
 const $ = (id) => document.getElementById(id);
 const record = [];
@@ -157,7 +173,7 @@ const talk = (on) => $("hero").classList.toggle("talk", on);
 let npcTalking = false;
 const NPC_LINES = {
   lawyerD: { objection: "異議あり！", doukana: "それはどうかな？", chotto: "ちょっと待った！その意見には穴があるよ！", gunu: "ぐぬぬ……！そこを突かれるとは……！", iisugi: "くっ、今のはちょっと言いすぎたか……！", madamada: "まだまだ！次のラウンドで取り返してやる！", kuzurenai: "ふふん、ぼくの言い分は崩れないよ！", dousita: "どうした？撃ち抜けなかったみたいだね！", zannen: "残念！ぼくの勝ちが近づいてきたかな？", hantai: "でも、反対の理由だってちゃんとあるんだよ！", chigau: "本当にそうかな？ぼくはちがうと思うね！" },
-  lawyerP: { nice: "ナイス論破！バッチリ効いたね！", kimatta: "決まったー！その調子！", sugoi: "すごい！コン太の弱いところ、ちゃんと見抜いたね！", daijoubu: "だいじょうぶ！次で取り返そう！", oshii: "おしい！黄色いところをよく見てね！", gyakuten: "まだ逆転できるよ、がんばって！" },
+  lawyerP: { nice: "ナイス論破！バッチリ効いたね！", sugoi: "すごい！コン太の弱いところ、ちゃんと見抜いたね！", daijoubu: "だいじょうぶ！次で取り返そう！", oshii: "おしい！黄色いところをよく見てね！", gyakuten: "まだ逆転できるよ、がんばって！" },
 };
 // key: 決めゼリフ（声あり）。text を渡すと、声は key、画面の文字は text
 function npcSay(id, key, text) {
@@ -290,6 +306,8 @@ function stamp(text) {
 
 async function openCourt(resume = false) {
   userClosed = false;
+  courtGen++;
+  layoutSeats(mode);
   if (!resume) {
     STEPS = mode === "solo" ? SOLO_STEPS : VERSUS_STEPS;
     stepNow = -1;
@@ -299,6 +317,11 @@ async function openCourt(resume = false) {
   }
   if (!resume) {
     parties.length = 0;
+    lastCalled = "";
+    CAST.plaintiff.name = "原告";
+    CAST.defendant.name = "被告";
+    $("seat-plaintiff").querySelector("span").textContent = "原告";
+    $("seat-defendant").querySelector("span").textContent = "被告";
     record.length = 0;
     evidence.length = 0;
     $("evidence").innerHTML = "";
@@ -315,7 +338,8 @@ async function openCourt(resume = false) {
     gameOver = false;
     if (mode !== "solo") bullets = [];
     ronpaArmed = false;
-    breakdown = { reason: 0, example: 0, counter: 0, ronpa: 0, repeat: 0, final: 0 };
+    breakdown = { reason: 0, example: 0, counter: 0, ronpa: 0, repeat: 0, final: 0, noreason: 0, through: 0 };
+    rebutted = false;
     roundWins = { player: 0, rival: 0 };
     best = { text: "", strength: -1 };
     hints = [];
@@ -381,13 +405,13 @@ async function openCourt(resume = false) {
           ["close", "objection", "evidenceBtn", "ronpa", "verdictBtn", "pauseBtn"].forEach((id) => ($(id).disabled = false));
         },
         audio: (b64) => {
-          if (paused) return;
+          if (paused || userClosed) return; // 閉じたあとに届いた声は鳴らさない
           talk(true);
           beat?.loud(true);
           speaker.play(b64);
         },
         heard: (t) => {
-          if (Date.now() < ignoreHeardUntil) return;
+          if (userClosed || Date.now() < ignoreHeardUntil) return;
 
           if (/論破|ろんぱ/.test(t)) ronpa();
           else if (/異議あり|いぎあり/.test(t)) {
@@ -397,12 +421,14 @@ async function openCourt(resume = false) {
             react("objection");
             shout("異議あり！");
           }
-          if (who !== "witness") onStage("witness", "", { fresh: true });
-          onStage("witness", t);
+          const sid = childSeat(heardTurn + t);
+          if (who !== sid) onStage(sid, "", { fresh: true });
+          onStage(sid, t);
           note("証言台", t);
           heardTurn += t;
         },
         said: (t) => {
+          if (userClosed) return; // 閉じたあとの文字起こしは無視（10/21 結果のあとも話し続けた）
           if (/これにて閉廷|閉廷します|閉廷！/.test(speakingTurn + t)) adjourn();
           if (/議論タイム|言い返し|反論はある/.test(speakingTurn + t)) phase("debate");
           const said = speakingTurn + t;
@@ -425,6 +451,11 @@ async function openCourt(resume = false) {
             heardTurn = "";
           }
           speakingTurn += t;
+          // ふたりで対戦：書記官が呼んだ名前（「ハナさん、どうぞ」など）を、次に話す子どもの手がかりにする
+          if (mode !== "solo") {
+            const called = [...speakingTurn.matchAll(/([ァ-ヶーぁ-ん一-龠A-Za-z]{1,8})さん/g)].map((m) => m[1]).filter((n) => parties.includes(n)).pop();
+            if (called) lastCalled = called;
+          }
           // 名乗ったらその人に切りかえる（文の途中でも）。「コン太、どうぞ」のような呼びかけでは切りかえない
           const tail = speakingTurn.slice(-24);
           const named = /ポン子(です|よ！|だよ)|弁護人ポン子/.test(tail) ? "lawyerP" : /コン太(です|だ！|だよ|様)|弁護人コン太/.test(tail) ? "lawyerD" : /タヌ吉(です|だよ)|書記官タヌ吉/.test(tail) ? "bailiff" : null;
@@ -443,6 +474,7 @@ async function openCourt(resume = false) {
         },
         turnComplete: () => {
           dbg.tc++;
+          turnWaiters.splice(0).forEach((r) => r());
           if (speaker) speaker.rate = 1; // 次の番は書記官の声から
           speakingTurn = "";
 
@@ -450,7 +482,7 @@ async function openCourt(resume = false) {
           closeNote();
           setTimeout(() => !speaker.busy && talk(false), 400);
         },
-        toolCall: (calls) => calls.forEach((c) => (c.name === "investigate" ? investigateCall(c) : judge(c))),
+        toolCall: (calls) => !userClosed && calls.forEach((c) => (c.name === "investigate" ? investigateCall(c) : judge(c))),
         goAway: () => status("まもなく接続が切れます（10分ごと）"),
         closed: (e) => {
           if (userClosed) return status("閉廷しました");
@@ -470,6 +502,31 @@ async function openCourt(resume = false) {
 // 判事たちの合議：3人がそれぞれ票を入れ、裁判長タヌキがまとめて言い渡す
 let judged = false;
 let userClosed = false;
+// 試合・閉廷のあと：書記官の最後の声が鳴り終わるのを待って（最長 ms）、マイクと Live を閉じる。
+// userClosed を立てるので「接続が切れたので再開」は出ない。閉廷ボタン・もう一回はそのまま使える（10/21 結果のあとも話し続け、スペイン語になった）
+// courtGen：待っているあいだに「もう一回！」で新しい試合が始まったら、そちらは閉じない
+const turnWaiters = [];
+let courtGen = 0;
+async function closeAfterSpeech(ms = 6000) {
+  if (userClosed) return;
+  const gen = courtGen;
+  const end = Date.now() + ms;
+  await new Promise((r) => {
+    turnWaiters.push(r);
+    setTimeout(r, ms);
+  });
+  while (Date.now() < end && speaker?.busy) await new Promise((r) => setTimeout(r, 200));
+  if (gen === courtGen) shutLive();
+}
+function shutLive() {
+  if (userClosed) return;
+  userClosed = true;
+  evt("live", "closed");
+  stopMic?.();
+  stopMic = null;
+  live?.close();
+  status("閉廷しました");
+}
 // 書記官（AI）への返事：道具の呼び出しから来たときは toolResponse、コードから始めたときは普通の知らせ
 function reply(call, result) {
   if (call.id) live.toolResponse([{ id: call.id, name: call.name, response: { result } }]);
@@ -536,7 +593,13 @@ async function judge(call) {
     await sfx.gavel(speaker.ctx);
     step("penalty");
     if (v.punishment) await punishmentTime(v.punishment, v.who, penaltyImg);
-    if (mode === "solo") await resultCard(soloResult, v);
+    if (mode === "solo") {
+      await resultCard(soloResult, v);
+      // 試合は終わり。書記官には「これにて閉廷！」だけ言わせて、Live を閉じる
+      reply(call, "試合は終わりました。日本語で『これにて閉廷！』とだけ言って、そのあとは何も話さない");
+      await closeAfterSpeech(6000);
+      return;
+    }
     reply(call, `裁判長がたった今、判決を読み上げた（書記官は判決をくり返さないこと）。罰ゲーム: ${v.who ?? ""}「${v.punishment?.text ?? v.sentence}」（画面でもう発表して、やり終えた）。書記官は、罰や仲直りが今できているかを名前を呼んで楽しく確かめてから「これにて閉廷！」と締める。`);
   } catch (e) {
     drum.stop();
@@ -544,7 +607,7 @@ async function judge(call) {
     reply(call, "判事が不在。書記官が代わりに、二人に仲直りの握手をすすめて閉廷する。");
   } finally {
     judging = false;
-    status("開廷中");
+    status(userClosed ? "閉廷しました" : "開廷中");
   }
 }
 
@@ -859,7 +922,9 @@ function showSoloScore() {
 // 採点（10/16「勝敗は結構条件凝っていて欲しい」）
 //  理由の強さ 0〜3（コン太は 3−強さ）／具体例 +1／コン太の反論に答えた +1／論破のあとに理由 +2／同じ理由の使い回し −1
 //  最終ラウンドは2倍。3ラウンドとも上回れば「完全論破」。同点ならサドンデス（もう1ラウンド）
-let breakdown = { reason: 0, example: 0, counter: 0, ronpa: 0, repeat: 0, final: 0 };
+let breakdown = { reason: 0, example: 0, counter: 0, ronpa: 0, repeat: 0, final: 0, noreason: 0, through: 0 };
+// コン太が直前のラウンドで言い返したか（r.line か 論破タイムのセリフ）。言い返されたのに答えないと「反論スルー」
+let rebutted = false;
 let roundWins = { player: 0, rival: 0 };
 let suddenDeath = false;
 // 異変ルーレット：僅差（2点以内）のとき、ときどき判決へのルーレットが狂って延長戦が1ラウンド増える（10/16 本人案）
@@ -900,30 +965,46 @@ async function soloPoint(r, statement) {
   const mult = last ? 2 : 1;
   const st = Math.max(0, Math.min(3, r.strength ?? 0));
   const parts = [];
-  let me = st, rival = 3 - st;
-  parts.push(`理由+${st}`);
-  breakdown.reason += st * mult;
-  if (r.example) {
-    me += 1;
-    parts.push("具体例+1");
-    breakdown.example += mult;
-  }
-  if (r.countered) {
-    me += 1;
-    parts.push("反論に答えた+1");
-    breakdown.counter += mult;
-  }
-  if (ronpaArmed && st >= 2) {
-    me += 2;
-    parts.push("論破成功+2");
-    breakdown.ronpa += 2 * mult;
+  let me = 0, rival = 0;
+  // 理由の無い主張・お題と関係ない話には点をやらない（10/21「ちゃんと回答しなくても勝てちゃう」）
+  if (!r.ontopic || !r.reason) {
+    rival = !r.ontopic ? 3 : 2;
+    parts.push(!r.ontopic ? "お題と関係ない：コン太+3" : "理由なし：コン太+2");
+    if (!r.reason) breakdown.noreason += 1;
+  } else {
+    me = st;
+    rival = 3 - st;
+    parts.push(`理由+${st}`);
+    breakdown.reason += st * mult;
+    if (r.example) {
+      me += 1;
+      parts.push("具体例+1");
+      breakdown.example += mult;
+    }
+    if (r.countered) {
+      me += 1;
+      parts.push("反論に答えた+1");
+      breakdown.counter += mult;
+    }
+    if (ronpaArmed && st >= 2) {
+      me += 2;
+      parts.push("論破成功+2");
+      breakdown.ronpa += 2 * mult;
+    }
+    if (r.repeat) {
+      me -= 1;
+      parts.push("使い回し−1");
+      breakdown.repeat -= mult;
+    }
   }
   ronpaArmed = false;
-  if (r.repeat) {
-    me -= 1;
-    parts.push("使い回し−1");
-    breakdown.repeat -= mult;
+  const wasRebutted = rebutted;
+  if (wasRebutted && !r.countered) {
+    rival += 1;
+    parts.push("反論スルー：コン太+1");
+    breakdown.through += 1;
   }
+  rebutted = false;
   me = Math.max(0, me) * mult;
   rival = rival * mult;
   if (last) {
@@ -973,9 +1054,10 @@ async function soloPoint(r, statement) {
   await waitClerk();
   const d = debateNext ? await api("/api/debate", { topic: topic?.motion, side, statement, bullets, level: rivalInfo.level }).catch(() => null) : null;
   if (d?.lines?.length) {
+    rebutted = true;
     const out = await nonstopDebate(d);
     if (out.hit) {
-      await npcSay("lawyerP", pick(["nice", "sugoi"])); // kimatta は声を作り直すまで外す
+      await npcSay("lawyerP", pick(["nice", "sugoi"])); // kimatta（声のファイル）は消したので使わない
       await npcSay("lawyerD", pick(["gunu", "iisugi", "madamada"]));
     } else {
       await npcSay("lawyerD", pick(["kuzurenai", "dousita", "zannen"]));
@@ -983,6 +1065,7 @@ async function soloPoint(r, statement) {
     }
   } else {
     const said = String(r.line ?? "").replace(/^異議あり！?/, "");
+    rebutted = !!said;
     const k = pick(["doukana", "objection"]);
     await (said ? npcSay("lawyerD", k, `${NPC_LINES.lawyerD[k]}${said}`) : npcSay("lawyerD", pick(["hantai", "chigau"])));
   }
@@ -1000,8 +1083,20 @@ function showHintCards() {
   if (!bullets.length || mode !== "solo") return;
   const row = document.createElement("div");
   row.id = "hintCards";
-  row.innerHTML = `<span class="lbl">🃏 証拠品（ヒントカード）</span>` + bullets.map((b) => `<span class="hc" title="${b.text}"><b>${b.name}</b>${b.text}</span>`).join("");
+  row.innerHTML = `<span class="lbl">🃏 証拠品（ヒントカード）</span>` + bullets.map((b, i) => `<button type="button" class="hc" data-i="${i}" title="${b.text}"><b>${b.name}</b>${b.text}</button>`).join("");
   $("topicCard").append(row);
+  // 押せる（10/21「カードをクリックしても押せない」）。論破タイム中は、舞台の証拠カードを選んだのと同じになる
+  row.querySelectorAll(".hc").forEach((el) => (el.onclick = () => {
+    if (!$("kotodama").classList.contains("on")) {
+      el.classList.remove("nudge");
+      void el.offsetWidth;
+      el.classList.add("nudge");
+      return;
+    }
+    selBullet = Number(el.dataset.i);
+    if (speaker) sfx.tick(speaker.ctx);
+    drawCylinder(true);
+  }));
 }
 // ── 論破タイム（法廷バトル風の反論シーン） ──
 // 相手のセリフが流れる → 黄色いウィークポイントのうち本物を、合う証拠カードで撃ち抜くと「論破」
@@ -1014,6 +1109,8 @@ function drawCylinder(on) {
     sfx.tick(speaker.ctx);
     drawCylinder(true);
   }));
+  // お題の下の証拠カードも、選択の表示をそろえる（論破タイムのあいだだけ）
+  document.querySelectorAll("#hintCards .hc").forEach((el) => el.classList.toggle("sel", on && Number(el.dataset.i) === selBullet));
 }
 async function nonstopDebate(d) {
   evt("debate", d.lines[0]?.text);
@@ -1021,7 +1118,7 @@ async function nonstopDebate(d) {
   $("stage").classList.add("debate");
   await banner("論破タイム 開始！");
   drawCylinder(true);
-  npcSay("lawyerD", pick(["chotto", "doukana", "objection"]), d.lines[0].text).then(() => onStage("lawyerD", "証拠カードを選んで、ほころび（朱の文字）を撃ち抜け！", { fresh: true }));
+  npcSay("lawyerD", pick(["chotto", "doukana", "objection"]), d.lines[0].text).then(() => onStage("lawyerD", "証拠カードを選んで、黄色いウィークポイントを撃ち抜け！", { fresh: true }));
   heat(25);
   let done, missed = 0;
   const finish = new Promise((r) => (done = r));
@@ -1074,35 +1171,31 @@ async function nonstopDebate(d) {
   $("stage").classList.remove("debate");
   return out;
 }
-// 「そこ、おかしいよ！」の巻物（中央から広がって、巻き戻る）。「！」だけ朱にする
+// 「そこ、おかしいよ！」の斜めの帯
 async function cutIn(word) {
   evt("cutin", word);
   const el = $("cutin");
-  el.querySelector("span").innerHTML = word.replace(/[&<>]/g, "").replace(/！/g, "<em>！</em>");
+  el.querySelector("span").textContent = word;
   el.classList.remove("on");
   void el.offsetWidth;
   el.classList.add("on");
   speedLines();
   flash();
-  // 拍子木（カン、カン）→ ジャン！。合計の長さは前と同じ（0.22 + 0.5 + 0.68 秒）
-  await sfx.clack(speaker.ctx);
   await sfx.objection(speaker.ctx);
-  await new Promise((r) => setTimeout(r, 680));
+  await new Promise((r) => setTimeout(r, 900));
 }
-// 論破の演出：和紙が破れて、朱の判子が押される（関数名は昔のまま）
+// 論破のガラスが割れる演出
 async function breakGlass() {
   const g = $("glass");
   g.innerHTML = Array.from({ length: 14 }, () => {
     const x = Math.random() * 100, y = Math.random() * 100;
     const pts = Array.from({ length: 3 }, () => `${x + (Math.random() - 0.5) * 50}% ${y + (Math.random() - 0.5) * 50}%`).join(",");
     return `<i style="clip-path: polygon(${pts}); --dx: ${(Math.random() - 0.5) * 140}%; --dy: ${(Math.random() - 0.3) * 140}%; --r: ${(Math.random() - 0.5) * 540}deg"></i>`;
-  }).join("") + `<b class="display">論破</b>`;
+  }).join("") + `<b class="display">論破！</b>`;
   g.classList.remove("on");
   void g.offsetWidth;
   g.classList.add("on");
-  // タヌキの腹鼓（ポン）→ 紙の破れる音を小さく
-  sfx.pon(speaker.ctx);
-  setTimeout(() => sfx.glass(speaker.ctx, 0.35), 160);
+  sfx.glass(speaker.ctx);
   speaker?.clip("crowd/oo.mp3", 0.6);
   react("ronpa");
   heat(30);
@@ -1143,7 +1236,6 @@ function banner(text) {
   $("banner").classList.remove("on");
   void $("banner").offsetWidth;
   $("banner").classList.add("on");
-  if (speaker) sfx.clack(speaker.ctx);
   speaker?.clip("crowd/zawa.mp3", 0.5);
   return new Promise((r) => setTimeout(r, 1400));
 }
@@ -1169,13 +1261,14 @@ let adjourned = false;
 async function adjourn() {
   if (adjourned) return;
   adjourned = true;
+  closeAfterSpeech(6000); // 「これにて閉廷」を言い終えたら、マイクと Live を閉じる（ふたりで対戦も）
   step("closed");
   shout("閉廷！");
   for (let i = 0; i < 60; i++) {
     const c = document.createElement("div");
     c.className = "confetti";
     c.style.left = `${Math.random() * 100}%`;
-    c.style.background = ["#e4532b", "#1f4e79", "#f1e7d0", "#e4532b"][i % 4];
+    c.style.background = ["#ff2d8a", "#ffd23f", "#8b3dff", "#fff"][i % 4];
     c.style.animationDelay = `${Math.random() * 0.8}s`;
     $("stage").append(c);
     setTimeout(() => c.remove(), 3600);
@@ -1210,7 +1303,7 @@ async function resultCard(result, v) {
     <div id="shareNote" class="rq"></div>
     <details class="more"><summary>くわしく見る（内訳・作戦メモ・名言）</summary>
       <div class="rq">お題：${topic?.motion ?? ""}（あなたは${side}）</div>
-      <div class="rq">内訳：理由 ${breakdown.reason}｜具体例 ${breakdown.example}｜反論に答えた ${breakdown.counter}｜論破 ${breakdown.ronpa}｜使い回し ${breakdown.repeat}｜ラウンド勝ち ${roundWins.player}/${rounds}${suddenDeath ? "｜サドンデス" : ""}${extraRound ? "｜延長戦" : ""}</div>
+      <div class="rq">内訳：理由 ${breakdown.reason}｜具体例 ${breakdown.example}｜反論に答えた ${breakdown.counter}｜論破 ${breakdown.ronpa}｜使い回し ${breakdown.repeat}｜理由なし ${breakdown.noreason ?? 0}回｜反論スルー ${breakdown.through ?? 0}回｜ラウンド勝ち ${roundWins.player}/${rounds}${suddenDeath ? "｜サドンデス" : ""}${extraRound ? "｜延長戦" : ""}</div>
       <div class="rb"><b>きょうの名言</b>「${best.text || "（また次回！）"}」</div>
       <div class="rc"><img src="img/lawyerP.png" alt=""><span><b>ポン子の作戦メモ（次はこうすると強いよ）</b>${hints.length ? hints.slice(-2).map((h) => `・${h}`).join("<br>") : "考えを自分の言葉で言えたのがすごい！"}</span></div>
       <div class="rp">通算 ${rv.wins ?? 0}勝 ${rv.losses ?? 0}敗</div>
@@ -1263,93 +1356,109 @@ function download(blob, name) {
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
-// 挑戦状の画像（1200×630。Xのカードの大きさ）。和紙の地に青海波、左上に朱の帯、判決は墨の大きな字＋朱印、
-// 右に藍の円を背にしたコン太、下に墨の帯（点数・お題）。影や発光は使わない（10/21）
+// 挑戦状の画像（1200×630。Xのカードの大きさ）。法廷バトル風：集中線・太い縁取りの文字・キャラの切り抜き
 async function shareImage(title, url) {
   try {
     // 文字ごとにフォントの分割ファイルが読まれるので、使う文字を全部渡して読み込む（「完」だけ別の字体になった）
     const used = `おうち裁判 挑戦状${title}あなた0123456789-コン太お題「」${topic?.motion ?? ""}【】${side}派の点、超えられる？`;
-    await Promise.all([30, 44, 54, 80, 150].map((px) => document.fonts.load(`${px}px "Dela Gothic One"`, used)));
+    await Promise.all([30, 40, 54, 150].map((px) => document.fonts.load(`${px}px "Dela Gothic One"`, used)));
     const W = 1200, H = 630;
-    const SUMI = "#15110e", PAPER = "#f1e7d0", SHU = "#e4532b", AI = "#1f4e79", GOLD = "#e6b422";
     const c = document.createElement("canvas");
     c.width = W;
     c.height = H;
     const g = c.getContext("2d");
     const font = (px) => `${px}px "Dela Gothic One", sans-serif`;
-    const text = (t, x, y, px, fill, align = "left") => {
+    const outline = (t, x, y, px, fill, { stroke = "#000", shadow = null, align = "left" } = {}) => {
       g.font = font(px);
       g.textAlign = align;
+      g.lineJoin = "round";
+      if (shadow) {
+        g.lineWidth = px / 5;
+        g.strokeStyle = shadow;
+        g.strokeText(t, x + px / 14, y + px / 14);
+        g.fillStyle = shadow;
+        g.fillText(t, x + px / 14, y + px / 14);
+      }
+      g.lineWidth = px / 6;
+      g.strokeStyle = stroke;
+      g.strokeText(t, x, y);
       g.fillStyle = fill;
       g.fillText(t, x, y);
     };
-    // 地：和紙＋青海波（同心円の弧を格子に並べる。薄い墨 .08）
-    g.fillStyle = PAPER;
+    // 背景：黒地にピンクの集中線（左の見出しから広がる）
+    g.fillStyle = "#120717";
     g.fillRect(0, 0, W, H);
-    g.strokeStyle = "rgba(21,17,14,.08)";
-    g.lineWidth = 2;
-    for (let row = 0, y = 0; y <= H + 30; row++, y += 20) {
-      for (let x = row % 2 ? 30 : 0; x <= W + 30; x += 60) {
-        for (const r of [30, 22, 14, 6]) {
-          g.beginPath();
-          g.arc(x, y, r, Math.PI, Math.PI * 2);
-          g.stroke();
-        }
-      }
+    g.save();
+    g.translate(380, 250);
+    for (let i = 0; i < 48; i++) {
+      g.rotate((Math.PI * 2) / 48);
+      g.fillStyle = i % 2 ? "rgba(255,79,163,.28)" : "rgba(138,63,252,.18)";
+      g.beginPath();
+      g.moveTo(0, 0);
+      g.lineTo(1400, -40);
+      g.lineTo(1400, 40);
+      g.fill();
     }
-    // 右：藍の円を背にしたコン太
-    g.fillStyle = AI;
-    g.beginPath();
-    g.arc(990, 270, 210, 0, Math.PI * 2);
-    g.fill();
+    g.restore();
+    const glow = g.createRadialGradient(380, 250, 20, 380, 250, 420);
+    glow.addColorStop(0, "rgba(255,79,163,.55)");
+    glow.addColorStop(1, "rgba(18,7,23,0)");
+    g.fillStyle = glow;
+    g.fillRect(0, 0, W, H);
+    // 右：コン太（ピンクの光を背負う）
     const kon = await new Promise((r) => {
       const i = new Image();
       i.onload = () => r(i);
       i.onerror = () => r(null);
       i.src = "img/lawyerD.png";
     });
-    if (kon) g.drawImage(kon, 780, 60, 420, 420);
-    // 左上：朱の帯（右端だけ斜め）に「おうち裁判 挑戦状」
-    g.fillStyle = SHU;
+    if (kon) {
+      g.save();
+      g.shadowColor = "#ff4fa3";
+      g.shadowBlur = 40;
+      g.drawImage(kon, 790, 90, 420, 420);
+      g.restore();
+    }
+    // 左上：小さな看板
+    g.fillStyle = "#ff4fa3";
     g.beginPath();
-    g.moveTo(0, 32);
-    g.lineTo(560, 32);
-    g.lineTo(530, 122);
-    g.lineTo(0, 122);
+    g.moveTo(40, 30);
+    g.lineTo(430, 30);
+    g.lineTo(410, 92);
+    g.lineTo(20, 92);
     g.fill();
-    text("おうち裁判 挑戦状", 40, 94, 44, PAPER);
-    // 中央左：判決の文字（墨・大きく）。長い判決（完全論破！など）は幅 640px に合わせて小さくする
+    outline("おうち裁判 挑戦状", 48, 78, 40, "#fff", { stroke: "#000" });
+    // 中央：判決の文字（大きく・斜め）
+    g.save();
+    g.translate(400, 270);
+    g.rotate(-0.1);
+    // 長い判決（完全論破！など）は幅に合わせて小さくする
     let px = 150;
     g.font = font(px);
     while (px > 70 && g.measureText(title).width > 640) g.font = font((px -= 6));
-    const tw = g.measureText(title).width;
-    const base = 340;
-    text(title, 48, base, px, SUMI);
-    // その右上に朱印（直径150・縁8px・「判」・-12度）
-    g.save();
-    g.translate(Math.min(48 + tw + 20, 700), base - px * 0.95);
-    g.rotate((-12 * Math.PI) / 180);
-    g.strokeStyle = SHU;
-    g.lineWidth = 8;
-    g.beginPath();
-    g.arc(0, 0, 71, 0, Math.PI * 2);
-    g.stroke();
-    g.textBaseline = "middle";
-    text("判", 0, 4, 80, SHU, "center");
+    outline(title, 0, 0, px, "#fff", { shadow: "#ff4fa3", align: "center" });
     g.restore();
-    g.textBaseline = "alphabetic";
-    // 下：墨の帯（上に朱の線）に点数とお題
-    g.fillStyle = SUMI;
-    g.fillRect(0, H - 230, W, 230);
-    g.fillStyle = SHU;
-    g.fillRect(0, H - 230, W, 4);
-    text(`あなた ${soloScore.player} - ${soloScore.rival} コン太`, 50, 470, 54, PAPER);
+    // 下：黒い斜めの帯に点数とお題
+    g.fillStyle = "#000";
+    g.beginPath();
+    g.moveTo(0, 400);
+    g.lineTo(W, 360);
+    g.lineTo(W, H);
+    g.lineTo(0, H);
+    g.fill();
+    g.fillStyle = "#ff4fa3";
+    g.fillRect(0, 396, W, 6);
+    outline(`あなた ${soloScore.player} - ${soloScore.rival} コン太`, 50, 470, 54, "#fff", { stroke: "#000" });
+    g.font = font(30);
+    g.textAlign = "left";
+    g.fillStyle = "#ffd23f";
     const t = `お題「${topic?.motion ?? ""}」`;
-    text(t.length > 30 ? `${t.slice(0, 29)}…」` : t, 50, 530, 30, GOLD);
-    text(`【${side}】派の ${soloScore.player}点、超えられる？`, 50, 580, 30, PAPER);
+    g.fillText(t.length > 30 ? `${t.slice(0, 29)}…」` : t, 50, 530);
+    g.fillStyle = "#fff";
+    g.fillText(`【${side}】派の ${soloScore.player}点、超えられる？`, 50, 580);
     g.font = "22px sans-serif";
     g.textAlign = "right";
-    g.fillStyle = "rgba(241,231,208,.5)";
+    g.fillStyle = "#c9b8e0";
     g.fillText(url.replace(/^https?:\/\//, "").split("?")[0], W - 30, H - 24);
     return await new Promise((r) => c.toBlob(r, "image/png"));
   } catch {
@@ -1419,7 +1528,7 @@ async function investigateCall(call) {
       evidence.push({ label, dataUrl: url });
       live.send({ realtimeInput: { video: { data: r.image, mimeType: "image/jpeg" } } });
     } else {
-      card.innerHTML = `<div style="padding:6px;text-align:left;font-size:.68rem">🔍 ${r.finding}${r.sources?.length ? `<br><a href="${r.sources[0].url}" target="_blank" style="color:#f1e7d0">出典：${r.sources[0].title}</a>` : ""}</div><div>${label}</div>`;
+      card.innerHTML = `<div style="padding:6px;text-align:left;font-size:.68rem">🔍 ${r.finding}${r.sources?.length ? `<br><a href="${r.sources[0].url}" target="_blank" style="color:#ffd23f">出典：${r.sources[0].title}</a>` : ""}</div><div>${label}</div>`;
       evidence.push({ label: `${label}（${r.finding}）` });
     }
     $("evidence").append(card);
@@ -1452,6 +1561,24 @@ function showParties() {
   }
   if (parties[0]) $("balP").textContent = `${parties[0]}（原告）`;
   if (parties[1]) $("balD").textContent = `${parties[1]}（被告）`;
+  // 席と立ち絵の名札にも名前を足す（「原告 ハナ」）
+  CAST.plaintiff.name = parties[0] ? `原告 ${parties[0]}` : "原告";
+  CAST.defendant.name = parties[1] ? `被告 ${parties[1]}` : "被告";
+  $("seat-plaintiff").querySelector("span").textContent = CAST.plaintiff.name;
+  $("seat-defendant").querySelector("span").textContent = CAST.defendant.name;
+  if (who === "plaintiff" || who === "defendant") $("nameplate").textContent = CAST[who].name;
+}
+// 子どもが話したときに光らせる席。ひとりで挑戦は証言台。ふたりで対戦は原告か被告：
+// 発言に名前が入っている → 今の段（原告／被告）→ 直前に書記官が呼んだ名前 → 原告
+let lastCalled = "";
+function childSeat(text = "") {
+  if (mode === "solo") return "witness";
+  if (parties[1] && text.includes(parties[1])) return "defendant";
+  if (parties[0] && text.includes(parties[0])) return "plaintiff";
+  const now = STEPS[stepNow]?.[0];
+  if (now === "defendant") return "defendant";
+  if (now === "plaintiff") return "plaintiff";
+  return lastCalled && lastCalled === parties[1] ? "defendant" : "plaintiff";
 }
 // 書記官が「〇〇さんですね？」と確かめた名前（聞き違えを本人が直したあとの名前）
 function confirmName(text) {
@@ -1537,6 +1664,7 @@ function closeCourt() {
   userClosed = true;
   setTimeout(() => {
     $("intro").classList.remove("hide");
+    layoutSeats("solo");
     loadRival();
     showShelf();
     $("topicCard").style.display = "none";
@@ -1674,7 +1802,7 @@ if (new URLSearchParams(location.search).has("debug")) {
     // 子ども役の声（mp3）を流し、流し終わってから発言として送る（デモ動画用）
     speak(text, url) {
       evt("child", text);
-      onStage("witness", text, { fresh: true });
+      onStage(childSeat(text), text, { fresh: true });
       return new Promise((done) => {
         const a = new Audio(url);
         a.onended = a.onerror = () => {
@@ -1702,7 +1830,7 @@ if (new URLSearchParams(location.search).has("debug")) {
     say(text) {
       ignoreHeardUntil = Date.now() + 15000;
       flyStatement(text);
-      onStage("witness", text, { fresh: true });
+      onStage(childSeat(text), text, { fresh: true });
       note("証言台", text);
       closeNote();
       live.send({ clientContent: { turns: [{ role: "user", parts: [{ text }] }], turnComplete: true } });
