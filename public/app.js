@@ -41,7 +41,7 @@ const SOLO = (topic, side, rv) => `あなたは「おうち裁判 ひとりで�
 1. 開廷！ルールを一言で。子どもに名前を聞く。聞こえた名前で「〇〇さんですね？」と確かめたら、そこで話すのをやめて返事を待つ（お題に進まない）。「はい」なら2へ。「ちがう」と言われたら、もう一度ゆっくり聞き直す。2回聞いても自信がなければ、名前は使わず「チャレンジャー」と呼ぶ（音声の聞き取りで名前を聞き違えることがあるため）。
 2. お題の説明を2〜3文で（上の説明を使う）。賛成・反対の例を1つずつ言い、「ラウンド1！${side}側の〇〇さん、どう思う？」と聞く。
 3. 各ラウンド: 子どもが意見を言う → 採点の知らせが届いたら1文だけ実況 → 知らせの指示どおりに進める。アドバイスや説明は試合中にしない（白熱させる）。
-コン太とポン子のセリフは、画面が別の声で話す。あなたは司会のタヌ吉だけを演じ、コン太やポン子のセリフは言わない（「コン太の反論は…」と代わりに言わない）。
+コン太とポン子の決めゼリフは、画面が別の声で話す。あなたは司会のタヌ吉だけを演じ、コン太やポン子になりきって話さない。コン太の反論は画面の箱に出る。反論の知らせが来たら、司会として子どもに分かる言葉で言い直して伝え、知らせの指示どおりに聞く。
 4. 「試合終了」の知らせが来たら「勝負あり！」とだけ言う。判決は画面が始めるので、ひとりで挑戦では call_judge を呼ばない（自分でラウンドを数えて終わらせない。採点の知らせが来るまで次へ進まない）。
 5. 判決と罰ゲームのあと「これにて閉廷！」。
 守ること: 子どもが話している途中で口をはさまない。子どもを言い負かして終わらせない。考えを言えたことを必ずほめる。日本語で話す。`;
@@ -138,6 +138,7 @@ let scene = 0; // 話し手が変わるたびに増やし、前の人の1文字�
 let ignoreHeardUntil = 0;
 const evt = (kind, text = "") => window.__events?.push({ t: performance.now(), kind, text: String(text).slice(0, 80) });
 function onStage(id, text, { fresh = false } = {}) {
+  if (["witness", "plaintiff", "defendant"].includes(id)) boxHold = false;
   if (fresh) evt("stage", `${id}: ${text}`);
   const c = CAST[id];
   if (who !== id || fresh) {
@@ -174,6 +175,8 @@ const talk = (on) => $("hero").classList.toggle("talk", on);
 // 声は AivisSpeech で作っておいた決めゼリフ（public/voice/）。ブラウザの読み上げは声が変だった（10/16）
 // 長いセリフは文字だけ出して、頭に短い決めゼリフの声を入れる（法廷バトルも一部だけ声が入る）
 let npcTalking = false;
+// コン太の反論を箱に出したまま、子どもが話し始めるまで書記官の文字で上書きしない
+let boxHold = false;
 const NPC_LINES = {
   lawyerD: { objection: "異議あり！", doukana: "それはどうかな？", chotto: "ちょっと待った！その意見には穴があるよ！", gunu: "ぐぬぬ……！そこを突かれるとは……！", iisugi: "くっ、今のはちょっと言いすぎたか……！", madamada: "まだまだ！次のラウンドで取り返してやる！", kuzurenai: "ふふん、ぼくの言い分は崩れないよ！", dousita: "どうした？撃ち抜けなかったみたいだね！", zannen: "残念！ぼくの勝ちが近づいてきたかな？", hantai: "でも、反対の理由だってちゃんとあるんだよ！", chigau: "本当にそうかな？ぼくはちがうと思うね！" },
   lawyerP: { nice: "ナイス論破！バッチリ効いたね！", sugoi: "すごい！コン太の弱いところ、ちゃんと見抜いたね！", daijoubu: "だいじょうぶ！次で取り返そう！", oshii: "おしい！黄色いところをよく見てね！", gyakuten: "まだ逆転できるよ、がんばって！" },
@@ -468,6 +471,10 @@ async function openCourt(resume = false) {
           const named = /ポン子(です|よ！|だよ)|弁護人ポン子/.test(tail) ? "lawyerP" : /コン太(です|だ！|だよ|様)|弁護人コン太/.test(tail) ? "lawyerD" : /タヌ吉(です|だよ)|書記官タヌ吉/.test(tail) ? "bailiff" : null;
           const id = named ?? (speakingTurn.length === t.length ? "bailiff" : who);
           // 声の高さもキャラごとに変える（音声は文字起こしとほぼ同じ順で届くので、名乗った所から切りかわる）
+          if (boxHold) {
+            note(CAST.bailiff.name, t);
+            return;
+          }
           if (who !== id) {
             speakingTurn = t;
             onStage(id, t, { fresh: true });
@@ -542,6 +549,7 @@ function reply(call, result) {
 async function judge(call) {
   evt("judge", call.id ? "ai" : "code");
   if (call.name !== "call_judge") return;
+  boxHold = false;
   // ひとりで挑戦の判決は、点数をつけ終えた画面だけが始める（書記官が先に呼ぶと最終ラウンドの点が入らない 10/16）
   if (mode === "solo" && call.id && !gameOver) {
     reply(call, "まだ試合中。判決は画面が始めるので待つ。今のラウンドの採点の知らせを待ってから進める。");
@@ -1049,30 +1057,26 @@ async function soloPoint(r, statement) {
     setTimeout(() => judge({ name: "call_judge", id: null, args: {} }), 1500);
   }
   step(end.startsWith("試合終了") ? "verdict" : `r${Math.min(rounds + 1, 3)}`);
-  // 次のラウンドの前に：コン太が言い返す（論破タイムがあれば画面で撃ち抜く）→ ポン子がひとこと → 司会が次へ
-  const debateNext = !end && bullets.length > 0;
-  const nextCue = `「ラウンド${rounds + 1}！」${rounds + 1 === 3 ? "（最終ラウンド！得点2倍と言って煽る）" : ""}`;
-  live?.send({ clientContent: { turns: [{ role: "user", parts: [{ text: `（ラウンド${rounds}の採点: 子ども+${me}（${parts.join("・")}）、コン太+${rival}。合計 あなた${soloScore.player} - ${soloScore.rival}コン太。理由「${r.why}」。${end || "実況は1文だけ。このあとコン太とポン子が話す（画面が話す）ので、知らせが来るまで黙って待つ。"}）` }] }], turnComplete: true } });
+  // 次のラウンドの前に：（よかったらポン子がほめる）→ コン太の反論を箱に出す → 書記官が言い直して子どもに聞く
+  // 論破タイム（流れる文を撃つ）は使わない（10/22「反論のところよくわからなかった」「自分の声が後回し」）
+  const nextCue = `「ラウンド${rounds + 1}！」${rounds + 1 === 3 ? "（最終ラウンド！得点2倍と煽る）" : ""}`;
+  live?.send({ clientContent: { turns: [{ role: "user", parts: [{ text: `（ラウンド${rounds}の採点: 子ども+${me}（${parts.join("・")}）、コン太+${rival}。合計 あなた${soloScore.player} - ${soloScore.rival}コン太。理由「${r.why}」。${end || "実況は1文だけ。このあとコン太の反論が画面に出るので、知らせが来るまで黙って待つ。"}）` }] }], turnComplete: true } });
   if (end) return;
   await waitClerk();
-  const d = debateNext ? await api("/api/debate", { topic: topic?.motion, side, statement, bullets, level: rivalInfo.level }).catch(() => null) : null;
-  if (d?.lines?.length) {
-    rebutted = true;
-    const out = await nonstopDebate(d);
-    if (out.hit) {
-      await npcSay("lawyerP", pick(["nice", "sugoi"])); // kimatta（声のファイル）は消したので使わない
-      await npcSay("lawyerD", pick(["gunu", "iisugi", "madamada"]));
-    } else {
-      await npcSay("lawyerD", pick(["kuzurenai", "dousita", "zannen"]));
-      await npcSay("lawyerP", pick(["daijoubu", "oshii"])); // gyakuten は Gemini の声がまだ（無料枠待ち）
-    }
-  } else {
-    const said = String(r.line ?? "").replace(/^異議あり！?/, "");
-    rebutted = !!said;
-    const k = pick(["doukana", "objection"]);
-    await (said ? npcSay("lawyerD", k, `${NPC_LINES.lawyerD[k]}${said}`) : npcSay("lawyerD", pick(["hantai", "chigau"])));
+  // 反論の文：opponent の r.line があればそれ（速さ優先）。無ければ /api/debate の1行目。どちらも無ければ決まり文句
+  let said = String(r.line ?? "").replace(/^異議あり！?/, "").trim();
+  if (!said && bullets.length) {
+    const d = await api("/api/debate", { topic: topic?.motion, side, statement, bullets, level: rivalInfo.level }).catch(() => null);
+    said = String(d?.lines?.[0]?.text ?? "").trim();
   }
-  live?.send({ clientContent: { turns: [{ role: "user", parts: [{ text: `（コン太とポン子はもう話しました。あなたは司会として、今の流れを受けて ${nextCue} と短く言い、子どもに聞いてください）` }] }], turnComplete: true } });
+  rebutted = !!said;
+  const rebuttal = said || NPC_LINES.lawyerD.hantai;
+  if (me > rival) await npcSay("lawyerP", pick(["nice", "sugoi"]));
+  // 箱の文字は、子どもが話し始めるまで書記官の言葉で上書きしない
+  boxHold = true;
+  await npcSay("lawyerD", pick(["doukana", "chotto"]), rebuttal);
+  const name = parties[0] || "チャレンジャー";
+  live?.send({ clientContent: { turns: [{ role: "user", parts: [{ text: `（コン太の反論は『${rebuttal}』。この反論を子どもに分かる言葉で1文で言い直してから、『${name}さん、どう返す？』と聞き、${nextCue}と言う。言い終わったら黙って子どもを待つ）` }] }], turnComplete: true } });
 }
 // 司会が話し終わるまで待つ（最長10秒）
 async function waitClerk() {
@@ -1245,7 +1249,8 @@ function banner(text) {
 }
 let shownPhase = "";
 function phase(kind) {
-  if (shownPhase === kind) return;
+  // ひとりで挑戦では出さない（書記官が反論を言い直すと「議論タイム！ 異議あり・論破のチャンス！」が出てしまう 10/22）
+  if (mode === "solo" || shownPhase === kind) return;
   shownPhase = kind;
   const text = { debate: "議論タイム！ 異議あり・論破のチャンス！", evidence: "証拠品タイム！ 証拠を突きつけろ！" }[kind];
   $("banner").textContent = text;
@@ -1307,7 +1312,7 @@ async function resultCard(result, v) {
     <div id="shareNote" class="rq"></div>
     <details class="more"><summary>くわしく見る（内訳・作戦メモ・名言）</summary>
       <div class="rq">お題：${topic?.motion ?? ""}（あなたは${side}）</div>
-      <div class="rq">内訳：理由 ${breakdown.reason}｜具体例 ${breakdown.example}｜反論に答えた ${breakdown.counter}｜論破 ${breakdown.ronpa}｜使い回し ${breakdown.repeat}｜理由なし ${breakdown.noreason ?? 0}回｜反論スルー ${breakdown.through ?? 0}回｜ラウンド勝ち ${roundWins.player}/${rounds}${suddenDeath ? "｜サドンデス" : ""}${extraRound ? "｜延長戦" : ""}</div>
+      <div class="rq">内訳：理由 ${breakdown.reason}｜具体例 ${breakdown.example}｜反論に答えた ${breakdown.counter}｜使い回し ${breakdown.repeat}｜理由なし ${breakdown.noreason ?? 0}回｜反論スルー ${breakdown.through ?? 0}回｜ラウンド勝ち ${roundWins.player}/${rounds}${suddenDeath ? "｜サドンデス" : ""}${extraRound ? "｜延長戦" : ""}</div>
       <div class="rb"><b>きょうの名言</b>「${best.text || "（また次回！）"}」</div>
       <div class="rc"><img src="img/lawyerP.png" alt=""><span><b>ポン子の作戦メモ（次はこうすると強いよ）</b>${hints.length ? hints.slice(-2).map((h) => `・${h}`).join("<br>") : "考えを自分の言葉で言えたのがすごい！"}</span></div>
       <div class="rp">通算 ${rv.wins ?? 0}勝 ${rv.losses ?? 0}敗</div>
