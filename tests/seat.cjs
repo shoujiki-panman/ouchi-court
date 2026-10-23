@@ -20,7 +20,7 @@ const check = (name, cond, detail = "") => { console.log(`${cond ? "ok" : "not o
     if (url.pathname.startsWith("/api/")) return route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "stubbed" }) });
     const file = url.pathname === "/" ? "index.html" : url.pathname.slice(1);
     if (file === "app.js") {
-      const hook = `\nwindow.__s = { childSeat, addressedParty, set(o) { if ("mode" in o) mode = o.mode; if ("parties" in o) { parties.length = 0; parties.push(...o.parties); } if ("lastCalled" in o) lastCalled = o.lastCalled; if ("step" in o) { STEPS = o.mode === "solo" ? SOLO_STEPS : VERSUS_STEPS; stepNow = STEPS.findIndex(([k]) => k === o.step); } }, heard(text) { const c = addressedParty(text, parties); if (c >= 0) lastCalled = c; return lastCalled; } };\n`;
+      const hook = `\nwindow.__s = { childSeat, addressedParty, pickName, parties: () => [...parties], set(o) { if ("mode" in o) mode = o.mode; if ("parties" in o) { parties.length = 0; parties.push(...o.parties); } if ("lastCalled" in o) lastCalled = o.lastCalled; if ("step" in o) { STEPS = o.mode === "solo" ? SOLO_STEPS : VERSUS_STEPS; stepNow = STEPS.findIndex(([k]) => k === o.step); } }, heard(text) { const c = addressedParty(text, parties); if (c >= 0) lastCalled = c; return lastCalled; } };\n`;
       return route.fulfill({ status: 200, contentType: "text/javascript", body: fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8") + hook });
     }
     const full = path.join(PUBLIC, file);
@@ -65,6 +65,17 @@ const check = (name, cond, detail = "") => { console.log(`${cond ? "ok" : "not o
   check("versus: 「モモさんどう思う？」 → Momo (0)", lc === 0, `lastCalled=${lc}`);
   lc = await page.evaluate(([o]) => { window.__s.set({ ...o, lastCalled: 1, step: "debate" }); return window.__s.heard("モモさんは名前が消えかけていたと言っています。"); }, [MK]);
   check("versus: 「モモさんは名前が…。」 (mention) keeps Kuri (1)", lc === 1, `lastCalled=${lc}`);
+  // take5-duo（10/24）の流れ：原告の長い発言から被告の名前を拾わない → 「被告の人、名前を」→ 被告の名乗りは被告の席
+  const MOMO = "デモテストモモ", KURI = "デモテストクリ";
+  let ps = await page.evaluate(([m]) => { window.__s.set({ mode: "versus", parties: [m], lastCalled: 0, step: "plaintiff" }); window.__s.pickName("冷蔵庫の最後のプリンを、私が食べようと取っておいたのに、勝手に食べられました。ふたに名前も書いてありました。"); return window.__s.parties(); }, [MOMO]);
+  check("versus: a plaintiff's long statement does not become the defendant's name", ps.length === 1 && ps[0] === MOMO, JSON.stringify(ps));
+  lc = await page.evaluate(() => window.__s.heard("名前付きプリンを勝手に食べられたなんて、それは聞き捨てならない！では、被告の人、名前を教えてくれるかな？"));
+  check("versus: 「被告の人、名前を」 → defendant (1)", lc === 1, `lastCalled=${lc}`);
+  check("versus: the defendant's self-introduction goes to the defendant seat", (await seat({}, `${KURI}です`)) === "defendant");
+  ps = await page.evaluate((k) => { window.__s.pickName(`${k}です`); return window.__s.parties(); }, KURI);
+  check("versus: the defendant's self-introduction is taken as the defendant's name", ps.length === 2 && ps[1] === KURI, JSON.stringify(ps));
+  lc = await page.evaluate(([o]) => { window.__s.set({ ...o, lastCalled: 0, step: "debate" }); return window.__s.heard("被告の人は名前が読めなかったと言っています。"); }, [{ mode: "versus", parties: [MOMO, KURI] }]);
+  check("versus: mentioning 被告の人 during the debate keeps the seat (0)", lc === 0, `lastCalled=${lc}`);
   // 呼びかけが無いときは段で
   check("versus: no address yet, defendant step → defendant", (await seat({ ...V, lastCalled: -1, step: "defendant" }, "でも、名前が消えかけていて読めませんでした。")) === "defendant");
   check("versus: no address yet, plaintiff step → plaintiff", (await seat({ ...V, lastCalled: -1, step: "plaintiff" }, "冷蔵庫の最後のプリンを…")) === "plaintiff");

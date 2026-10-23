@@ -1619,7 +1619,8 @@ function confirmName(text) {
 }
 function pickName(text) {
   if (parties.length >= 2) return;
-  const m = text.match(/(?:わたしは|私は|ぼくは|僕は|おれは|俺は)?\s*([ァ-ヶーぁ-ん一-龠A-Za-z]{1,8}?)(?:です|だよ|。|、|！)/);
+  // 発言の頭の名乗りだけ（10/24「冷蔵庫の最後のプリンを、…」から被告の名前「の最後のプリンを」を拾った）
+  const m = text.trim().match(/^(?:わたしは|私は|ぼくは|僕は|おれは|俺は)?\s*([ァ-ヶーぁ-ん一-龠A-Za-z]{1,8}?)(?:です|だよ)/);
   if (m && parties.length < 2 && !parties.includes(m[1]) && !/^(うん|はい|いいえ|でも|だって)$/.test(m[1])) parties.push(m[1]);
   showParties();
 }

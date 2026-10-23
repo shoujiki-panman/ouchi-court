@@ -45,10 +45,11 @@ function addressKind(text, after) {
 
 // 書記官のせりふで、最後に呼びかけた参加者の番号（0=原告, 1=被告）。呼びかけが無ければ -1
 export function addressedParty(text = "", parties = []) {
-  const re = /さん/g;
+  // 役名は「被告の人、」「原告の方、」でも呼びかけ（10/24「被告の人、名前を教えてくれるかな？」を拾えず、被告の名乗りで原告の席が光った）
+  const re = /さん|(?<=原告|被告)(?:の人|の方)/g;
   let found = -1, vocativeAt = -1, m;
   while ((m = re.exec(text))) {
-    const kind = addressKind(text, m.index + 2);
+    const kind = addressKind(text, m.index + m[0].length);
     if (!kind) continue;
     if (kind === "question" && vocativeAt >= 0 && !/[。！？!?\n]/.test(text.slice(vocativeAt, m.index))) continue;
     const word = wordBefore(text, m.index);
@@ -57,7 +58,7 @@ export function addressedParty(text = "", parties = []) {
     if (who < 0) who = word.endsWith("原告") ? 0 : word.endsWith("被告") ? 1 : -1;
     if (who < 0) continue;
     found = who;
-    if (kind === "vocative") vocativeAt = m.index + 2;
+    if (kind === "vocative") vocativeAt = m.index + m[0].length;
   }
   return found;
 }

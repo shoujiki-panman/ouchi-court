@@ -41,6 +41,14 @@ assert.equal(addressedParty("モモさんは名前が消えかけていたと言
 ok("「モモさんは名前が…。」 is a mention, not an address");
 assert.equal(addressedParty("クリさん、モモさんはどう思っていると思う？", M), 1);
 ok("a 、-address earlier in the same question wins over 「〇〇さんは…？」");
+// 役名＋「の人／の方」での呼びかけ（take5-duo 10/24 実例）と、言及との区別
+assert.equal(addressedParty("名前付きプリンを勝手に食べられたなんて、それは聞き捨てならない！では、被告の人、名前を教えてくれるかな？", [M[0]]), 1);
+assert.equal(addressedParty("まずは原告の人、名前と何があったか教えて！", []), 0);
+assert.equal(addressedParty("デモテストモモさんですね？それでは被告の方、お名前を教えてくれるかな？", [M[0]]), 1);
+ok("「被告の人、」「原告の人、」「被告の方、」 address by role (the last address in the turn wins)");
+assert.equal(addressedParty("被告の人に聞いてみよう。", M), -1);
+assert.equal(addressedParty("被告の人は名前が読めなかったそうです。", M), -1);
+ok("「被告の人に」「被告の人は…。」 are mentions");
 let q = "モモさんはどう思";
 assert.equal(addressedParty(q, M), -1);
 q += "いますか？";
