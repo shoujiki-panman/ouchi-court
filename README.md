@@ -39,7 +39,7 @@ There is also a two-player mode (plaintiff and defendant seats). There, code cou
 Browser (public/)                      Cloudflare Worker (src/worker.js)
  ├ mic ⇄ Gemini Live API (clerk)  ←──── /api/token   short-lived ephemeral token (single use)
  ├ statement → /api/opponent ─────────► Workers AI (Mistral Small 3.1) → Gemini fallback
- ├ rebuttal fallback → /api/debate ───► Gemini
+ ├ rebuttal fallback → /api/debate ───► Workers AI (Mistral Small 3.1) → Gemini fallback
  ├ game end → /api/verdict ───────────► judge panel + chief judge
  │                                       └─ MCP (Streamable HTTP) → oyasumi-mcp
  │                                            get_precedents / file_case
