@@ -1,6 +1,7 @@
 // Gemini Live API（WebSocket）につなぎ、マイクの声を送って、返ってくる声を鳴らす最小の部品。
 // 公式ドキュメント（ai.google.dev/gemini-api/docs/live）の手順どおり: 使い捨てトークン → v1beta の Constrained エンドポイント
 // → 最初に setup → 16kHz PCM の音声を realtimeInput で送る → 24kHz PCM の音声と書き起こし・道具の呼び出しを受け取る。
+import { LiveUsage } from "./live-usage.js";
 
 const WS = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained";
 
@@ -97,34 +98,102 @@ export class Speaker {
   }
 }
 
+const micAbortError = () => new DOMException("Microphone initialization aborted", "AbortError");
+
+// Native permission / worklet / resume promises cannot all be cancelled, but callers
+// must be able to leave immediately. Keep rejection handlers on the underlying work.
+function awaitMicStep(promise, signal) {
+  if (!signal) return promise;
+  return new Promise((resolve, reject) => {
+    const cleanup = () => signal.removeEventListener("abort", abort);
+    const abort = () => { cleanup(); reject(micAbortError()); };
+    signal.addEventListener("abort", abort, { once: true });
+    Promise.resolve(promise).then(
+      (value) => { cleanup(); signal.aborted ? reject(micAbortError()) : resolve(value); },
+      (error) => { cleanup(); reject(error); },
+    );
+    if (signal.aborted) abort();
+  });
+}
+
 // マイク → 16kHz・16bit の PCM を 100ms ごとに渡す
-export async function startMic(onChunk) {
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-  const ctx = new AudioContext({ sampleRate: 16000 });
-  await ctx.audioWorklet.addModule("capture-worklet.js");
-  const node = new AudioWorkletNode(ctx, "capture");
-  node.port.onmessage = (e) => {
-    // 声の大きさ（0〜1）も一緒に渡す（ひとりで挑戦の「黙ったら番を終える」に使う）
-    const pcm = new Int16Array(e.data);
-    let sum = 0;
-    for (let i = 0; i < pcm.length; i += 4) sum += (pcm[i] / 32768) ** 2;
-    onChunk(toBase64(new Uint8Array(e.data)), Math.min(1, Math.sqrt(sum / (pcm.length / 4)) * 6));
+export async function startMic(onChunk, { signal } = {}) {
+  if (signal?.aborted) throw micAbortError();
+  let stream, ctx, node, source;
+  let stopped = false;
+  const stopTracks = (mediaStream) => {
+    for (const track of mediaStream.getTracks()) {
+      try { track.stop(); } catch { /* still release the other tracks and context */ }
+    }
   };
-  ctx.createMediaStreamSource(stream).connect(node);
-  return () => {
-    stream.getTracks().forEach((t) => t.stop());
-    ctx.close();
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    signal?.removeEventListener("abort", stop);
+    if (node) node.port.onmessage = null;
+    try { source?.disconnect(); } catch { /* already disconnected */ }
+    try { node?.disconnect(); } catch { /* already disconnected */ }
+    if (stream) stopTracks(stream);
+    try { ctx?.close().catch(() => {}); } catch { /* already closed */ }
   };
+  const checkActive = () => { if (stopped || signal?.aborted) throw micAbortError(); };
+  signal?.addEventListener("abort", stop, { once: true });
+  try {
+    const acquiring = Promise.resolve(navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    })).then((acquired) => {
+      // getUserMedia's permission dialog is not cancellable. Release a late grant
+      // even when startMic has already rejected and the court no longer exists.
+      if (stopped || signal?.aborted) {
+        stopTracks(acquired);
+        throw micAbortError();
+      }
+      stream = acquired;
+      return acquired;
+    });
+    await awaitMicStep(acquiring, signal);
+    checkActive();
+    ctx = new AudioContext({ sampleRate: 16000 });
+    await awaitMicStep(ctx.audioWorklet.addModule("capture-worklet.js"), signal);
+    checkActive();
+    node = new AudioWorkletNode(ctx, "capture");
+    node.port.onmessage = (e) => {
+      if (stopped) return;
+      // 声の大きさ（0〜1）も一緒に渡す（ひとりで挑戦の「黙ったら番を終える」に使う）
+      const pcm = new Int16Array(e.data);
+      let sum = 0;
+      for (let i = 0; i < pcm.length; i += 4) sum += (pcm[i] / 32768) ** 2;
+      onChunk(toBase64(new Uint8Array(e.data)), Math.min(1, Math.sqrt(sum / (pcm.length / 4)) * 6));
+    };
+    source = ctx.createMediaStreamSource(stream);
+    source.connect(node);
+    if (ctx.state === "suspended") await awaitMicStep(ctx.resume(), signal);
+    checkActive();
+    return stop;
+  } catch (error) {
+    stop();
+    throw error;
+  }
 }
 
 export class Live {
-  constructor({ token, model, setup, on }) {
+  constructor({ token, model, setup, on = {} }) {
     this.on = on;
+    this.usage = new LiveUsage();
+    const notifyUsage = () => {
+      if (typeof on.usage !== "function") return;
+      // Optional instrumentation must never interrupt speech or the game.
+      try { Promise.resolve(on.usage(this.usageSummary())).catch(() => {}); } catch { /* optional callback */ }
+    };
     this.ws = new WebSocket(`${WS}?access_token=${encodeURIComponent(token)}`);
+    // Decode binary JSON synchronously too, preserving metadata/turn receive order.
+    this.ws.binaryType = "arraybuffer";
     this.ws.onopen = () => this.send({ setup: { model: `models/${model}`, ...setup } });
     this.ws.onmessage = async (e) => {
-      const text = typeof e.data === "string" ? e.data : await e.data.text();
+      const text = typeof e.data === "string" ? e.data
+        : e.data instanceof ArrayBuffer ? new TextDecoder().decode(e.data) : await e.data.text();
       const m = JSON.parse(text);
+      if (this.usage.observe(m)) notifyUsage();
       if (m.setupComplete) on.ready?.();
       const sc = m.serverContent;
       for (const p of sc?.modelTurn?.parts ?? []) if (p.inlineData?.data) on.audio?.(p.inlineData.data);
@@ -135,7 +204,11 @@ export class Live {
       if (m.toolCall?.functionCalls) on.toolCall?.(m.toolCall.functionCalls);
       if (m.goAway) on.goAway?.(m.goAway);
     };
-    this.ws.onclose = (e) => on.closed?.(e);
+    this.ws.onclose = (e) => {
+      this.usage.close();
+      notifyUsage();
+      on.closed?.(e);
+    };
     this.ws.onerror = () => on.error?.("接続できませんでした");
   }
   send(msg) {
@@ -150,6 +223,7 @@ export class Live {
   toolResponse(functionResponses) {
     this.send({ toolResponse: { functionResponses } });
   }
+  usageSummary() { return this.usage.summary(); }
   close() {
     this.ws.close();
   }

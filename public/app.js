@@ -126,6 +126,41 @@ const record = [];
 const evidence = [];
 let mode = "versus", topic = null, side = "賛成";
 let live, stopMic, speaker, camStream, judging = false, speakingTurn = "", who = "", heardTurn = "", lastStatement = "";
+let micController;
+// ?metrics は数値の利用量だけを保持。?debug の発言ログとは別にし、外部送信しない。
+const metricsMode = new URLSearchParams(location.search).has("metrics");
+const usageConnections = [];
+let usageConnectionNumber = 0, droppedUsageConnections = 0;
+function newUsageConnection(model) {
+  if (!metricsMode) return null;
+  const entry = {
+    connection: ++usageConnectionNumber,
+    mode: mode === "solo" ? "solo" : "versus",
+    model: typeof model === "string" && /^[a-z0-9][a-z0-9._-]{0,80}$/i.test(model) ? model : "UNKNOWN",
+    observedElapsedMs: 0,
+    usage: null,
+  };
+  usageConnections.push(entry);
+  if (usageConnections.length > 20) {
+    usageConnections.shift();
+    droppedUsageConnections++;
+  }
+  return entry;
+}
+if (metricsMode) {
+  const snapshot = () => JSON.parse(JSON.stringify({
+    schemaVersion: 1,
+    scope: "Gemini Live only; reported snapshots, not a bill or total game cost",
+    droppedConnections: droppedUsageConnections,
+    connections: usageConnections,
+  }));
+  window.__courtMetrics = {
+    snapshot,
+    download() {
+      download(new Blob([JSON.stringify(snapshot(), null, 2)], { type: "application/json" }), "ouchi-court-live-usage.json");
+    },
+  };
+}
 
 const pass = () => $("pass").value || localStorage.getItem("ouchi-court-pass") || "";
 // この端末の合図（乱数）。コン太の戦績を端末ごとに分けるためだけに使う。保存できない環境ではこのページの間だけ
@@ -333,7 +368,17 @@ function stamp(text) {
 
 async function openCourt(resume = false) {
   userClosed = false;
-  courtGen++;
+  const gen = ++courtGen;
+  let connectionClosed = false;
+  const active = () => gen === courtGen && !userClosed && !connectionClosed;
+  micController?.abort();
+  const controller = new AbortController();
+  micController = controller;
+  // 再開・再試合では前の接続を残さない。遅れて届く旧接続の通知は世代で除外する。
+  stopMic?.();
+  stopMic = null;
+  live?.close();
+  speaker?.stop();
   layoutSeats(mode);
   if (!resume) {
     STEPS = mode === "solo" ? SOLO_STEPS : VERSUS_STEPS;
@@ -393,9 +438,11 @@ async function openCourt(resume = false) {
   status("開廷の準備中…");
   try {
     const { token, model } = await api("/api/token");
+    if (!active()) return;
     speaker = new Speaker();
     onStage("judge", "これより、おうち裁判を開廷します。", { fresh: true });
     if (!resume) await sfx.fanfare(speaker.ctx);
+    if (!active()) return;
     beat = sfx.bgm(); // 魔王魂のBGM（落ち着き→議論→白熱）
     if (!resume) {
       heatVal = 0;
@@ -405,6 +452,8 @@ async function openCourt(resume = false) {
       $("pts").textContent = "0";
     }
     heat(0);
+    const usageEntry = newUsageConnection(model);
+    const usageStarted = performance.now();
     live = new Live({
       token,
       model,
@@ -417,28 +466,43 @@ async function openCourt(resume = false) {
         realtimeInputConfig: { automaticActivityDetection: { silenceDurationMs: mode === "solo" ? 2500 : 1300 } },
       },
       on: {
+        usage: usageEntry ? (summary) => {
+          usageEntry.observedElapsedMs = Math.round(performance.now() - usageStarted);
+          usageEntry.usage = summary;
+        } : undefined,
         ready: async () => {
+          if (!active()) return;
           const restart = resume && record.length ? `接続が切れたので再開します。これまでの法廷記録:\n${record.map((r) => `${r.who}: ${r.text}`).join("\n").slice(-3000)}\n続きから進めてください（開廷の宣言はしない）。${judged ? "判決はもう出ています。" : ""}` : "開廷してください。";
-          live.send({ clientContent: { turns: [{ role: "user", parts: [{ text: restart }] }], turnComplete: true } });
           try {
-            stopMic = await startMic((b64, lvl) => {
-              if (judging || paused || npcTalking) return;
+            const releaseMic = await startMic((b64, lvl) => {
+              if (!active() || judging || paused || npcTalking) return;
               live.audio(b64);
-            });
+            }, { signal: controller.signal });
+            // 許可ダイアログ中に閉廷・切断・再開した場合、遅れて取得したマイクも解放する。
+            if (!active()) {
+              releaseMic();
+              return;
+            }
+            stopMic = releaseMic;
+            live.send({ clientContent: { turns: [{ role: "user", parts: [{ text: restart }] }], turnComplete: true } });
             status("開廷中：そのまま話しかけてください");
           } catch (e) {
+            if (!active()) return;
+            shutLive();
             status(`マイクが使えません（${e.message}）。ブラウザのマイクの許可を確かめてください。`, true);
+            $("resume").style.display = "inline-block";
+            return;
           }
           ["close", "objection", "evidenceBtn", "ronpa", "verdictBtn", "pauseBtn"].forEach((id) => ($(id).disabled = false));
         },
         audio: (b64) => {
-          if (paused || userClosed) return; // 閉じたあとに届いた声は鳴らさない
+          if (paused || !active()) return; // 閉じたあと・古い接続から届いた声は鳴らさない
           talk(true);
           beat?.loud(true);
           speaker.play(b64);
         },
         heard: (t) => {
-          if (userClosed || Date.now() < ignoreHeardUntil) return;
+          if (!active() || Date.now() < ignoreHeardUntil) return;
 
           if (/論破|ろんぱ/.test(t)) ronpa();
           else if (/異議あり|いぎあり/.test(t)) {
@@ -455,7 +519,7 @@ async function openCourt(resume = false) {
           heardTurn += t;
         },
         said: (t) => {
-          if (userClosed) return; // 閉じたあとの文字起こしは無視（10/21 結果のあとも話し続けた）
+          if (!active()) return; // 閉じたあとの文字起こしは無視（10/21 結果のあとも話し続けた）
           if (/これにて閉廷|閉廷します|閉廷！/.test(speakingTurn + t)) adjourn();
           if (/議論タイム|言い返し|反論はある/.test(speakingTurn + t)) phase("debate");
           const said = speakingTurn + t;
@@ -500,32 +564,42 @@ async function openCourt(resume = false) {
           note(CAST[id].name, t);
         },
         interrupted: () => {
+          if (!active()) return;
           beat?.loud(false);
           speaker.stop();
           talk(false);
         },
         turnComplete: () => {
+          if (!active()) return;
           dbg.tc++;
           turnWaiters.splice(0).forEach((r) => r());
           if (speaker) speaker.rate = 1; // 次の番は書記官の声から
           speakingTurn = "";
 
-          setTimeout(() => !speaker.busy && beat?.loud(false), 600);
+          setTimeout(() => active() && !speaker.busy && beat?.loud(false), 600);
           closeNote();
-          setTimeout(() => !speaker.busy && talk(false), 400);
+          setTimeout(() => active() && !speaker.busy && talk(false), 400);
         },
-        toolCall: (calls) => !userClosed && calls.forEach((c) => (c.name === "investigate" ? investigateCall(c) : judge(c))),
-        goAway: () => status("まもなく接続が切れます（10分ごと）"),
+        toolCall: (calls) => active() && calls.forEach((c) => (c.name === "investigate" ? investigateCall(c) : judge(c))),
+        goAway: () => active() && status("まもなく接続が切れます（10分ごと）"),
         closed: (e) => {
-          if (userClosed) return status("閉廷しました");
+          connectionClosed = true;
+          controller.abort();
+          if (gen !== courtGen) return;
+          stopMic?.();
+          stopMic = null;
+          if (userClosed) return;
+          speaker?.stop();
           beat?.loud(false);
           status(`接続が切れました（${e?.code ?? ""} ${e?.reason ?? ""}）。「再開する」で続きから始められます。`, true);
           $("resume").style.display = "inline-block";
         },
-        error: (m) => status(m, true),
+        error: (m) => active() && status(m, true),
       },
     });
   } catch (e) {
+    if (!active()) return;
+    shutLive();
     status(`開廷できませんでした: ${e.message}`, true);
     $("open").disabled = false;
   }
@@ -554,6 +628,8 @@ function shutLive() {
   if (userClosed) return;
   userClosed = true;
   evt("live", "closed");
+  micController?.abort();
+  micController = null;
   stopMic?.();
   stopMic = null;
   live?.close();
@@ -1692,6 +1768,8 @@ function submitEvidence() {
 
 function closeCourt() {
   userClosed = true;
+  micController?.abort();
+  micController = null;
   setTimeout(() => {
     $("intro").classList.remove("hide");
     layoutSeats("solo");
@@ -1712,6 +1790,7 @@ function closeCourt() {
   }, 1500);
   beat?.stop();
   stopMic?.();
+  stopMic = null;
   live?.close();
   speaker?.stop();
   hideCamera();

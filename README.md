@@ -85,6 +85,23 @@ The BGM files are **not included** in this repository: 魔王魂's terms do not 
 redistributing the audio files themselves. Download 「サイバー38」「サイバー40」「サイバー42」
 from https://maou.audio and save them as `public/bgm/calm.mp3`, `debate.mp3` and `hot.mp3`.
 
+## Maintenance and usage observations
+
+Run `node --test tests/*.test.mjs` for the offline Node checks. The GitHub Actions
+regression workflow also runs the local Chromium fixtures for seats, DOM escaping,
+and microphone/session lifecycle. These fixtures use synthetic data and block
+external API traffic; they do not validate a physical microphone or iPhone Safari.
+
+`node scripts/health-check.mjs` checks the public page and its required static
+JavaScript without calling AI endpoints. The scheduled workflow checks static
+delivery daily; a passing check does not establish that voice or AI services work.
+See [the maintenance guide](docs/commercial/maintenance-ja.md).
+
+For developer usage observations, open the app with `?metrics` and use
+`window.__courtMetrics.snapshot()` or `.download()`. This keeps numeric Live API
+metadata in memory and does not enable transcript debug logging. The observations
+are not a bill or a complete game cost. See [measurement limits](docs/commercial/usage-measurement-ja.md).
+
 ## License
 
 The original source code in this repository is released under the MIT License (see `LICENSE`).
