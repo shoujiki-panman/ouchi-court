@@ -378,7 +378,7 @@ async function openCourt(resume = false) {
   stopMic?.();
   stopMic = null;
   live?.close();
-  speaker?.stop();
+  speaker?.dispose();
   layoutSeats(mode);
   if (!resume) {
     STEPS = mode === "solo" ? SOLO_STEPS : VERSUS_STEPS;
@@ -1792,7 +1792,7 @@ function closeCourt() {
   stopMic?.();
   stopMic = null;
   live?.close();
-  speaker?.stop();
+  speaker?.dispose();
   hideCamera();
   $("open").disabled = false;
   ["close", "objection", "evidenceBtn", "ronpa", "verdictBtn", "pauseBtn"].forEach((id) => ($(id).disabled = true));

@@ -16,85 +16,186 @@ const fromBase64 = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 export class Speaker {
   constructor(rate = 24000) {
     this.ctx = new AudioContext({ sampleRate: rate });
-    // 話している声の大きさを測る（キャラの口の動きに使う）
-    this.analyser = this.ctx.createAnalyser();
-    this.analyser.fftSize = 512;
-    this.analyser.connect(this.ctx.destination);
-    this.wave = new Uint8Array(this.analyser.fftSize);
     this.next = 0;
     this.playing = new Set();
+    this._finishes = new Map();
+    this._pending = new Set();
+    this.clips = new Map();
+    this._generation = 0;
+    this.disposed = false;
     // 声の高さ（コン太・ポン子は速く高くして、書記官と別人に聞こえるようにする 10/16）
     this.rate = 1;
+    try {
+      // 話している声の大きさを測る（キャラの口の動きに使う）
+      this.analyser = this.ctx.createAnalyser();
+      this.analyser.fftSize = 512;
+      this.analyser.connect(this.ctx.destination);
+      this.wave = new Uint8Array(this.analyser.fftSize);
+    } catch (error) {
+      this.dispose();
+      throw error;
+    }
+  }
+  _active(generation) {
+    return !this.disposed && generation === this._generation;
+  }
+  // stop/dispose で直ちに待機を終了する。元の Promise の後着・失敗も処理済みにする。
+  _wait(promise, generation, timeoutMs) {
+    return new Promise((resolve) => {
+      let done = false, timer;
+      const finish = (value) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        this._pending.delete(cancel);
+        resolve(value);
+      };
+      const cancel = () => finish(null);
+      this._pending.add(cancel);
+      Promise.resolve(promise).then(
+        (value) => finish(this._active(generation) ? value : null),
+        cancel,
+      );
+      if (timeoutMs !== undefined) timer = setTimeout(cancel, timeoutMs);
+      if (!this._active(generation)) cancel();
+    });
+  }
+  // 全形式の音源を同じ終了処理へ登録する。clip は next / busy に含めない。
+  _playBuffer(buf, { queued = true, playbackRate = 1, volume } = {}) {
+    if (this.disposed) return Promise.resolve();
+    let src, gain, timer, finished = false, resolve;
+    const completion = new Promise((done) => { resolve = done; });
+    const finish = (stopSource = false) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      if (src) {
+        src.removeEventListener("ended", ended);
+        this.playing.delete(src);
+        this._finishes.delete(src);
+        if (stopSource) { try { src.stop(); } catch { /* not started / already ended */ } }
+        try { src.disconnect(); } catch { /* already disconnected */ }
+      }
+      try { gain?.disconnect(); } catch { /* already disconnected */ }
+      resolve();
+    };
+    const ended = () => finish();
+    try {
+      src = this.ctx.createBufferSource();
+      src.buffer = buf;
+      src.playbackRate.value = playbackRate;
+      if (volume === undefined) src.connect(this.analyser);
+      else {
+        gain = this.ctx.createGain();
+        gain.gain.value = volume;
+        src.connect(gain);
+        gain.connect(this.ctx.destination);
+      }
+      src.addEventListener("ended", ended);
+      this.playing.add(src);
+      this._finishes.set(src, finish);
+      const at = queued ? Math.max(this.ctx.currentTime + 0.03, this.next) : this.ctx.currentTime;
+      const len = buf.duration / playbackRate;
+      if (queued) src.start(at);
+      else src.start();
+      if (!finished) {
+        if (queued) this.next = at + len;
+        // バックグラウンド等で ended が来ない場合も音源・タイマーを残さない。
+        timer = setTimeout(() => finish(true), (Math.max(0, at - this.ctx.currentTime) + len + 1) * 1000);
+      }
+    } catch {
+      // 音声が利用不可でもゲームを継続する。途中まで作った音源は必ず解放。
+      finish(true);
+    }
+    return this.ctx.state === "running" ? completion : Promise.resolve();
   }
   // WAV（判事の声）は丸ごとデコードして鳴らす
   async playWav(b64) {
-    // 再生が止められている（スマホで音が許可されていない等）なら、待たずに進む
-    // 再生の許可を頼むが、ユーザーの操作がないと返ってこないことがあるので0.5秒で見切る
-    if (this.ctx.state !== "running") await Promise.race([this.ctx.resume().catch(() => {}), new Promise((r) => setTimeout(r, 500))]);
-    if (this.ctx.state !== "running") return;
-    const buf = await this.ctx.decodeAudioData(fromBase64(b64).buffer);
-    const src = this.ctx.createBufferSource();
-    src.buffer = buf;
-    src.connect(this.analyser);
-    const at = Math.max(this.ctx.currentTime + 0.03, this.next);
-    src.start(at);
-    this.next = at + buf.duration;
-    // 「鳴り終わり」が来ないこともある（画面が裏にあるとき等）ので、長さ＋1秒で見切る
-    return new Promise((done) => {
-      src.addEventListener("ended", done);
-      setTimeout(done, (buf.duration + 1) * 1000);
-    });
+    const generation = this._generation;
+    if (!this._active(generation)) return;
+    try {
+      // 再生許可が返らない場合は 0.5 秒で見切る。stop なら待たずに終了。
+      if (this.ctx.state !== "running") await this._wait(this.ctx.resume(), generation, 500);
+      if (!this._active(generation) || this.ctx.state !== "running") return;
+      const buf = await this._wait(this.ctx.decodeAudioData(fromBase64(b64).buffer), generation);
+      if (!buf || !this._active(generation)) return;
+      return this._playBuffer(buf);
+    } catch { /* decode / resume failure must not leave an unhandled rejection */ }
   }
   play(b64, rate = 24000) {
-    const bytes = fromBase64(b64);
-    const pcm = new Int16Array(bytes.buffer, bytes.byteOffset, Math.floor(bytes.length / 2));
-    const buf = this.ctx.createBuffer(1, pcm.length, rate);
-    const ch = buf.getChannelData(0);
-    for (let i = 0; i < pcm.length; i++) ch[i] = pcm[i] / 32768;
-    const src = this.ctx.createBufferSource();
-    src.buffer = buf;
-    src.playbackRate.value = this.rate;
-    const len = buf.duration / this.rate;
-    src.connect(this.analyser);
-    const at = Math.max(this.ctx.currentTime + 0.03, this.next);
-    src.start(at);
-    this.next = at + len;
-    this.playing.add(src);
-    src.onended = () => this.playing.delete(src);
-    if (this.ctx.state !== "running") return Promise.resolve();
-    // 「鳴り終わり」が来ないこともあるので、長さ＋1秒で見切る
-    return new Promise((done) => {
-      src.addEventListener("ended", done);
-      setTimeout(done, (len + 1) * 1000);
-    });
+    if (this.disposed) return Promise.resolve();
+    try {
+      const bytes = fromBase64(b64);
+      const pcm = new Int16Array(bytes.buffer, bytes.byteOffset, Math.floor(bytes.length / 2));
+      const buf = this.ctx.createBuffer(1, pcm.length, rate);
+      const ch = buf.getChannelData(0);
+      for (let i = 0; i < pcm.length; i++) ch[i] = pcm[i] / 32768;
+      return this._playBuffer(buf, { playbackRate: this.rate });
+    } catch { return Promise.resolve(); }
   }
-  // 観客の声などの短い音（mp3）。一度読んだら覚えておく
+  // 観客の声などの短い音（mp3）。取得済みの音声は stop 後も再利用できる。
   async clip(url, volume = 0.4) {
-    this.clips ??= new Map();
-    if (!this.clips.has(url)) this.clips.set(url, fetch(url).then((r) => r.arrayBuffer()).then((b) => this.ctx.decodeAudioData(b)));
-    const buf = await this.clips.get(url);
-    const src = this.ctx.createBufferSource();
-    src.buffer = buf;
-    const g = this.ctx.createGain();
-    g.gain.value = volume;
-    src.connect(g).connect(this.ctx.destination);
-    src.start();
+    const generation = this._generation;
+    if (!this._active(generation)) return;
+    let entry = this.clips.get(url);
+    if (!entry) {
+      entry = { controller: new AbortController(), buffer: null };
+      this.clips.set(url, entry);
+      entry.promise = (async () => {
+        try {
+          const response = await fetch(url, { signal: entry.controller.signal });
+          if (!this._active(generation) || !response.ok) return null;
+          const bytes = await response.arrayBuffer();
+          if (!this._active(generation)) return null;
+          const buffer = await this.ctx.decodeAudioData(bytes);
+          if (!this._active(generation)) return null;
+          entry.buffer = buffer;
+          return buffer;
+        } catch { return null; }
+        finally {
+          // 失敗した取得をキャッシュし続けず、次の呼出しでは再試行できる。
+          if (!entry.buffer && this.clips.get(url) === entry) this.clips.delete(url);
+        }
+      })();
+    }
+    const buf = entry.buffer ?? await this._wait(entry.promise, generation);
+    if (!buf || !this._active(generation)) return;
+    this._playBuffer(buf, { queued: false, volume });
   }
   // いまの声の大きさ（0〜1）
   level() {
+    if (this.disposed) return 0;
     this.analyser.getByteTimeDomainData(this.wave);
     let sum = 0;
     for (const v of this.wave) sum += ((v - 128) / 128) ** 2;
     return Math.min(1, Math.sqrt(sum / this.wave.length) * 4);
   }
   stop() {
-    for (const s of this.playing) s.stop();
-    this.playing.clear();
+    this._generation++;
+    for (const cancel of [...this._pending]) cancel();
+    for (const finish of [...this._finishes.values()]) finish(true);
+    for (const [url, entry] of this.clips) {
+      if (!entry.buffer) {
+        entry.controller.abort();
+        this.clips.delete(url);
+      }
+    }
     this.next = 0;
+  }
+  // 裁判終了時の永久解放。stop と異なり、これ以降の再生は受け付けない。
+  dispose() {
+    if (this.disposed) return this._disposePromise ?? Promise.resolve();
+    this.disposed = true;
+    this.stop();
+    this.clips.clear();
+    try { this.analyser?.disconnect(); } catch { /* already disconnected */ }
+    try { this._disposePromise = Promise.resolve(this.ctx.close()).catch(() => {}); }
+    catch { this._disposePromise = Promise.resolve(); }
+    return this._disposePromise;
   }
   // 鳴らしている途中か（音が止まっている＝ブラウザが再生を許していないときは、鳴っていないとみなす）
   get busy() {
-    return this.ctx.state === "running" && this.ctx.currentTime < this.next;
+    return !this.disposed && this.ctx.state === "running" && this.ctx.currentTime < this.next;
   }
 }
 

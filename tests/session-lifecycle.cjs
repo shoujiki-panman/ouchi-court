@@ -7,9 +7,10 @@ const path = require("node:path");
 const PUBLIC = path.join(__dirname, "..", "public");
 const ORIGIN = "http://court.test";
 const fakeLive = `
-window.fixture = { connections: [], microphones: [], stopped: 0, audioCalls: 0 };
+window.fixture = { connections: [], microphones: [], speakers: [], stopped: 0, audioCalls: 0 };
 export class Speaker {
-  constructor() { this.ctx = { state: 'running', currentTime: 0 }; this.busy = false; }
+  constructor() { this.ctx = { state: 'running', currentTime: 0 }; this.busy = false; fixture.speakers.push(this); }
+  dispose() { this.ctx.state = 'closed'; }
   stop() {} level() { return 0; } play() {} clip() {} playWav() {}
 }
 export class Live {
@@ -97,6 +98,7 @@ export const sfx = new Proxy({}, { get: (_, key) => key === 'bgm' ? () => beat :
     await fresh();
     await ready(0);
     await page.evaluate(() => lifecycle.openCourt(true));
+    check("replacement court disposes the previous speaker context", await page.evaluate(() => fixture.speakers.map(s => s.ctx.state)), ["closed", "running"]);
     await ready(1);
     await resolveMic(1);
     await resolveMic(0);
@@ -106,6 +108,13 @@ export const sfx = new Proxy({}, { get: (_, key) => key === 'bgm' ? () => beat :
     check("late audio cannot enter replacement session", await page.evaluate(() => fixture.audioCalls), 0);
     await page.evaluate(() => fixture.connections[1].on.closed({ code: 1006 }));
     check("replacement disconnect releases its microphone", await page.evaluate(() => fixture.stopped), 2);
+
+    await fresh();
+    await ready(0);
+    await resolveMic(0);
+    await page.evaluate(() => lifecycle.closeCourt());
+    check("closing court disposes speaker context", await page.evaluate(() => fixture.speakers[0].ctx.state), "closed");
+    check("closing court releases its microphone", await page.evaluate(() => fixture.stopped), 1);
 
     await fresh();
     await ready(0);

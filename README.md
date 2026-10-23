@@ -92,6 +92,11 @@ regression workflow also runs the local Chromium fixtures for seats, DOM escapin
 and microphone/session lifecycle. These fixtures use synthetic data and block
 external API traffic; they do not validate a physical microphone or iPhone Safari.
 
+Microphone initialization can be cancelled even while browser permission or audio
+setup is pending. Speaker tests cover stopping PCM, WAV and crowd clips, rejecting
+late playback after cancellation, and disposing old audio contexts on court exit
+or replacement.
+
 `node scripts/health-check.mjs` checks the public page and its required static
 JavaScript without calling AI endpoints. The scheduled workflow checks static
 delivery daily; a passing check does not establish that voice or AI services work.
