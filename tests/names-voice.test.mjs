@@ -49,6 +49,14 @@ ok("「被告の人、」「原告の人、」「被告の方、」 address by r
 assert.equal(addressedParty("被告の人に聞いてみよう。", M), -1);
 assert.equal(addressedParty("被告の人は名前が読めなかったそうです。", M), -1);
 ok("「被告の人に」「被告の人は…。」 are mentions");
+// ひらがな表記（take7-duo 10/24 実例：書記官は「モモ」を「もも」と書いた）。相手の名前の言及（クリさんの）では決めない
+assert.equal(addressedParty("ももさん、クリさんの言い分に、何か言い返しはありますか？", M), 0);
+assert.equal(addressedParty("ももさん、クリさんのこの提案について、どう思いますか？", M), 0);
+assert.equal(addressedParty("それで、何があったのか、ももさん教えてくれるかな？", M), 0);
+ok("hiragana 「ももさん、」 addresses デモテストモモ; 「クリさんの」 stays a mention");
+assert.equal(selfNamedParty("ももです", M), 0);
+assert.equal(selfNamedParty("デモテストくりです", M), 1);
+ok("self-introduction matches across hiragana/katakana");
 let q = "モモさんはどう思";
 assert.equal(addressedParty(q, M), -1);
 q += "いますか？";

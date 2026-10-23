@@ -76,6 +76,10 @@ const check = (name, cond, detail = "") => { console.log(`${cond ? "ok" : "not o
   check("versus: the defendant's self-introduction is taken as the defendant's name", ps.length === 2 && ps[1] === KURI, JSON.stringify(ps));
   lc = await page.evaluate(([o]) => { window.__s.set({ ...o, lastCalled: 0, step: "debate" }); return window.__s.heard("被告の人は名前が読めなかったと言っています。"); }, [{ mode: "versus", parties: [MOMO, KURI] }]);
   check("versus: mentioning 被告の人 during the debate keeps the seat (0)", lc === 0, `lastCalled=${lc}`);
+  // take7-duo（10/24）：「ももさん、クリさんの言い分に…」→ モモ（前はクリの台本と席になった）
+  lc = await page.evaluate(([o]) => { window.__s.set({ ...o, lastCalled: 1, step: "debate" }); return window.__s.heard("ももさん、クリさんの言い分に、何か言い返しはありますか？"); }, [{ mode: "versus", parties: [MOMO, KURI] }]);
+  check("versus: hiragana 「ももさん、」 after Kuri spoke → Momo (0)", lc === 0, `lastCalled=${lc}`);
+  check("versus: Momo's reply goes to the plaintiff seat", (await seat({}, "名前が消えかけていても、私が取っておいたのは知っていたはずです。")) === "plaintiff");
   // 呼びかけが無いときは段で
   check("versus: no address yet, defendant step → defendant", (await seat({ ...V, lastCalled: -1, step: "defendant" }, "でも、名前が消えかけていて読めませんでした。")) === "defendant");
   check("versus: no address yet, plaintiff step → plaintiff", (await seat({ ...V, lastCalled: -1, step: "plaintiff" }, "冷蔵庫の最後のプリンを…")) === "plaintiff");

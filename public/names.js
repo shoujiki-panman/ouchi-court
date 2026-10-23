@@ -5,11 +5,16 @@
 // - 子どもの席は、本人の名乗り（「〇〇です」「わたしは〇〇です」）だけで決める（相手の名前を言っただけでは動かさない）
 const NAME_CHAR = /[ァ-ヶーぁ-ん一-龠A-Za-z]/;
 
+// ひらがなをカタカナにそろえる（書記官は「モモ」を「もも」と書くことがある 10/24）。名前どうしの照合だけに使う
+const kata = (s) => s.replace(/[ぁ-ゖ]/g, (c) => String.fromCharCode(c.charCodeAt(0) + 0x60));
+
 // 語の末尾がどの参加者の名前（または名前の末尾2文字以上）と一致するか。長く一致した方。同じ長さなら決めない（-1）
 function partyByTail(word, parties) {
   let best = -1, bestLen = 0, tie = false;
+  word = kata(word);
   parties.forEach((p, i) => {
     if (!p) return;
+    p = kata(p);
     for (let k = p.length; k >= Math.min(2, p.length); k--) {
       if (word.endsWith(p.slice(-k))) {
         if (k > bestLen) { best = i; bestLen = k; tie = false; } else if (k === bestLen) tie = true;
