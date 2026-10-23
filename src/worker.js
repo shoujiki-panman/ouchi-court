@@ -490,17 +490,29 @@ async function opponent(env, { topic, side, record, last, level = 1 }) {
   return { id: "lawyerD", name: "弁護人コン太", line: line.slice(0, 60), sway, point, why, hint, strength, isArg, ...flags };
 }
 
-// ライバル・コン太の戦績（家族ごとに1つ）。勝つたびにコン太のレベルが上がる
-async function rival(env, { result, topic, best } = {}) {
-  const r = (await env.COURT.get("rival", "json")) ?? { level: 1, wins: 0, losses: 0, draws: 0, history: [] };
-  if (!result) return r;
+// ライバル・コン太の戦績（端末ごとに1つ）。勝つたびにコン太のレベルが上がる
+// 端末がつくった乱数（x-court-id, UUID v4）で分ける。KV のキーは乱数そのものではなく SHA-256。
+// 残すのは勝ち負けの数と最後の結果だけ（お題・子どもの発言は残さないし返さない）。
+// 旧い共有キー "rival" は読まない・消さない
+const COURT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+async function rivalKey(id) {
+  const h = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(id));
+  return `rival:v2:${[...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, "0")).join("")}`;
+}
+async function rival(env, id, { result } = {}) {
+  const pick = (r) => ({ level: r.level, wins: r.wins, losses: r.losses, draws: r.draws, last: r.last });
+  const fresh = { level: 1, wins: 0, losses: 0, draws: 0, last: null };
+  if (!COURT_ID.test(String(id ?? ""))) return fresh; // 合図が無い・形が違うときは記録もしない
+  const key = await rivalKey(id);
+  const r = pick({ ...fresh, ...((await env.COURT.get(key, "json")) ?? {}) });
+  if (!["win", "lose", "draw"].includes(result)) return r;
   if (result === "win") {
     r.wins++;
     r.level = Math.min(5, r.level + 1);
   } else if (result === "lose") r.losses++;
   else r.draws++;
-  r.history = [...(r.history ?? []), { at: Date.now(), topic, result, best }].slice(-10);
-  await env.COURT.put("rival", JSON.stringify(r));
+  r.last = result;
+  await env.COURT.put(key, JSON.stringify(r), { expirationTtl: 60 * 60 * 24 * 180 });
   return r;
 }
 
@@ -562,7 +574,7 @@ export default {
         return json(t);
       }
       if (pathname === "/api/opponent") return json(await opponent(env, await request.json()));
-      if (pathname === "/api/rival") return json(await rival(env, await request.json()));
+      if (pathname === "/api/rival") return json(await rival(env, request.headers.get("x-court-id"), await request.json()));
       if (pathname === "/api/kotodama") return json(await kotodama(env, await request.json()));
       if (pathname === "/api/debate") return json(await debate(env, await request.json()));
       if (pathname === "/api/penalty-image") return json(await penaltyImage(env, await request.json()));

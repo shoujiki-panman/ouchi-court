@@ -1,0 +1,39 @@
+MIT License
+
+Copyright (c) 2026 shoujiki-panman
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+Scope
+
+This MIT License applies only to the original source code written for this
+project by the copyright holder above.
+
+It does not apply to, and does not change the license or terms of:
+- third-party dependencies, libraries, frameworks, services and APIs used by
+  this project;
+- any third-party code;
+- music and sound files (for example, BGM from maou.audio, which is not
+  included in this repository and is subject to its own terms);
+- images, artwork, character art, voice recordings and other media or assets,
+  including content generated with third-party AI services.
+
+Each of these remains subject to its own original license or terms of use.

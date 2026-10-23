@@ -117,14 +117,30 @@ function layoutSeats(m) {
 layoutSeats("solo");
 
 const $ = (id) => document.getElementById(id);
+// AI の返事・子どもの発言・URL の値を HTML に入れるときは必ず通す（タグとして動かないように）
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+// リンクは http(s) だけ（javascript: などは捨てる）
+const safeUrl = (u) => { try { const x = new URL(String(u ?? ""), location.href); return /^https?:$/.test(x.protocol) ? x.href : ""; } catch { return ""; } };
 const record = [];
 const evidence = [];
 let mode = "versus", topic = null, side = "賛成";
 let live, stopMic, speaker, camStream, judging = false, speakingTurn = "", who = "", heardTurn = "", lastStatement = "";
 
 const pass = () => $("pass").value || localStorage.getItem("ouchi-court-pass") || "";
+// この端末の合図（乱数）。コン太の戦績を端末ごとに分けるためだけに使う。保存できない環境ではこのページの間だけ
+let memCourtId = "";
+const courtId = () => {
+  try {
+    let id = localStorage.getItem("ouchi.courtId");
+    if (!id) localStorage.setItem("ouchi.courtId", (id = crypto.randomUUID()));
+    return id;
+  } catch {
+    return (memCourtId ||= crypto.randomUUID());
+  }
+};
 const api = async (path, body) => {
-  const r = await fetch(path, { method: "POST", headers: { "content-type": "application/json", "x-passphrase": pass() }, body: JSON.stringify(body ?? {}) });
+  const headers = { "content-type": "application/json", "x-passphrase": pass(), ...(path === "/api/rival" ? { "x-court-id": courtId() } : {}) };
+  const r = await fetch(path, { method: "POST", headers, body: JSON.stringify(body ?? {}) });
   const j = await r.json();
   if (!r.ok) throw new Error(j.error ?? r.status);
   return j;
@@ -586,7 +602,7 @@ async function judge(call) {
       v.who = soloResult === "win" ? "コン太" : soloResult === "lose" ? `${parties[0] ?? "あなた"}` : "二人";
       // 罰ゲームの絵は、判決を読んでいるあいだに作っておく（負けた方がやる。子どもが負けたら書記官がお手本）
       penaltyImg = api("/api/penalty-image", { id: v.punishment?.id, who: soloResult === "win" ? "rival" : "clerk" }).catch(() => null);
-      api("/api/rival", { result: soloResult, topic: topic?.motion, best: best.text }).then((r) => (rivalInfo = { ...r, lastResult: soloResult })).catch(() => {});
+      api("/api/rival", { result: soloResult }).then((r) => (rivalInfo = { ...r, lastResult: soloResult })).catch(() => {});
     }
     // 判決の声は、投票を見せているあいだに作っておく（前は投票が終わってから作っていて待たされた）
     const voiceP = api("/api/voice", { text: v.speech }).catch(() => null);
@@ -683,7 +699,7 @@ async function comebackTime(loser) {
 function bigScore(title, plus, total) {
   const el = document.createElement("div");
   el.className = "bigScore display";
-  el.innerHTML = `<div>${title}</div><div class="plus">${plus}</div><div class="total">合計 ${total}pt</div>`;
+  el.innerHTML = `<div>${esc(title)}</div><div class="plus">${esc(plus)}</div><div class="total">合計 ${esc(total)}pt</div>`;
   $("stage").append(el);
   $("score").classList.remove("bump");
   void $("score").offsetWidth;
@@ -780,7 +796,7 @@ async function punishmentTime(p, who, imgPromise) {
   $("rItem").textContent = p.text;
   $("rItem").classList.add("done");
   // 絵が間に合わなければ待たない（あとから出てきたら差しこむ）
-  const showImg = (img) => img?.image && $("roulette").classList.contains("on") && ($("rImg").innerHTML = `<img src="data:image/jpeg;base64,${img.image}" alt="">`);
+  const showImg = (img) => img?.image && $("roulette").classList.contains("on") && ($("rImg").innerHTML = `<img src="data:image/jpeg;base64,${esc(img.image)}" alt="">`);
   const img = await Promise.race([imgPromise ?? Promise.resolve(null), new Promise((r) => setTimeout(() => r(null), 2000))]);
   if (img) showImg(img);
   else imgPromise?.then(showImg);
@@ -928,7 +944,7 @@ function showShelf() {
 showShelf();
 function showSoloScore() {
   const label = gameOver ? "試合終了" : extraRound ? "⚡延長戦 ×2" : suddenDeath ? "サドンデス" : rounds >= 3 ? "試合終了" : rounds === 2 ? "最終ラウンド ×2" : `ラウンド ${rounds + 1}/3`;
-  $("soloScore").innerHTML = `<span class="me">あなた ${soloScore.player}</span><span class="vs">-</span><span class="rival">${soloScore.rival} コン太</span><small>${label}｜コン太 Lv${rivalInfo.level}</small>`;
+  $("soloScore").innerHTML = `<span class="me">あなた ${soloScore.player}</span><span class="vs">-</span><span class="rival">${soloScore.rival} コン太</span><small>${label}｜コン太 Lv${esc(rivalInfo.level)}</small>`;
 }
 // 採点（10/16「勝敗は結構条件凝っていて欲しい」）
 //  理由の強さ 0〜3（コン太は 3−強さ）／具体例 +1／コン太の反論に答えた +1／論破のあとに理由 +2／同じ理由の使い回し −1
@@ -1091,7 +1107,7 @@ function showHintCards() {
   const row = document.createElement("div");
   row.id = "hintCards";
   // 名前だけの小さいチップ（説明は title）
-  row.innerHTML = bullets.map((b, i) => `<button type="button" class="hc" data-i="${i}" title="${b.text}"><b>${b.name}</b></button>`).join("");
+  row.innerHTML = bullets.map((b, i) => `<button type="button" class="hc" data-i="${i}" title="${esc(b.text)}"><b>${esc(b.name)}</b></button>`).join("");
   $("topicCard").append(row);
   // 押せる（10/21「カードをクリックしても押せない」）。論破タイム中は、舞台の証拠カードを選んだのと同じになる
   row.querySelectorAll(".hc").forEach((el) => (el.onclick = () => {
@@ -1110,7 +1126,7 @@ function showHintCards() {
 // 相手のセリフが流れる → 黄色いウィークポイントのうち本物を、合う証拠カードで撃ち抜くと「論破」
 let bullets = [], selBullet = 0;
 function drawCylinder(on) {
-  $("kotodama").innerHTML = bullets.map((b, i) => `<button class="kd ${i === selBullet ? "sel" : ""}" data-i="${i}"><b>${b.name}</b><small>${b.text}</small></button>`).join("");
+  $("kotodama").innerHTML = bullets.map((b, i) => `<button class="kd ${i === selBullet ? "sel" : ""}" data-i="${i}"><b>${esc(b.name)}</b><small>${esc(b.text)}</small></button>`).join("");
   $("kotodama").classList.toggle("on", on);
   $("kotodama").querySelectorAll(".kd").forEach((el) => (el.onclick = () => {
     selBullet = Number(el.dataset.i);
@@ -1231,7 +1247,8 @@ function startSoloClock() {
 }
 // コーチ・ポン子のひとこと（画面の右下に出す）
 function coach(text) {
-  $("coach").innerHTML = `<img src="img/lawyerP.png" alt=""><div><b>コーチ ポン子</b>${text}</div>`;
+  $("coach").innerHTML = `<img src="img/lawyerP.png" alt=""><div><b>コーチ ポン子</b><span class="ct"></span></div>`;
+  $("coach").querySelector(".ct").textContent = String(text ?? "");
   $("coach").classList.remove("on");
   void $("coach").offsetWidth;
   $("coach").classList.add("on");
@@ -1303,18 +1320,18 @@ async function resultCard(result, v) {
   const vsFriend = challenge && challenge.topic === topic?.motion ? `<div class="rf display">挑戦状の ${challenge.score}点 → あなた ${soloScore.player}点：${soloScore.player > challenge.score ? "🎉 超えた！" : soloScore.player === challenge.score ? "🤝 同点！" : "💧 あと少し！"}</div>` : "";
   // 結果カードは大事なものだけ。くわしくは開いたときだけ（10/16「ごちゃついてわかりにくい」）
   $("result").innerHTML = `<div class="card">
-    <div class="rt display">${title}</div>
+    <div class="rt display">${esc(title)}</div>
     <div class="rs display">あなた ${soloScore.player} - ${soloScore.rival} コン太</div>
     ${vsFriend}
-    ${newBadges.length ? `<div class="nb display">NEW バッジ！ ${newBadges.map((b) => `${b.icon} ${b.name}`).join("　")}</div>` : ""}
+    ${newBadges.length ? `<div class="nb display">NEW バッジ！ ${newBadges.map((b) => `${esc(b.icon)} ${esc(b.name)}`).join("　")}</div>` : ""}
     <div class="rc"><img src="img/lawyerD.png" alt=""><span>${rivalLine}</span></div>
     <div class="rbtns"><button id="shareX" class="display"><span>📣 友だちに挑戦状を送る</span></button><button id="again" class="display gold"><span>もう一回！</span></button></div>
     <div id="shareNote" class="rq"></div>
     <details class="more"><summary>くわしく見る（内訳・作戦メモ・名言）</summary>
-      <div class="rq">お題：${topic?.motion ?? ""}（あなたは${side}）</div>
+      <div class="rq">お題：${esc(topic?.motion)}（あなたは${esc(side)}）</div>
       <div class="rq">内訳：理由 ${breakdown.reason}｜具体例 ${breakdown.example}｜反論に答えた ${breakdown.counter}｜使い回し ${breakdown.repeat}｜理由なし ${breakdown.noreason ?? 0}回｜反論スルー ${breakdown.through ?? 0}回｜ラウンド勝ち ${roundWins.player}/${rounds}${suddenDeath ? "｜サドンデス" : ""}${extraRound ? "｜延長戦" : ""}</div>
-      <div class="rb"><b>きょうの名言</b>「${best.text || "（また次回！）"}」</div>
-      <div class="rc"><img src="img/lawyerP.png" alt=""><span><b>ポン子の作戦メモ（次はこうすると強いよ）</b>${hints.length ? hints.slice(-2).map((h) => `・${h}`).join("<br>") : "考えを自分の言葉で言えたのがすごい！"}</span></div>
+      <div class="rb"><b>きょうの名言</b>「${esc(best.text || "（また次回！）")}」</div>
+      <div class="rc"><img src="img/lawyerP.png" alt=""><span><b>ポン子の作戦メモ（次はこうすると強いよ）</b>${hints.length ? hints.slice(-2).map((h) => `・${esc(h)}`).join("<br>") : "考えを自分の言葉で言えたのがすごい！"}</span></div>
       <div class="rp">通算 ${rv.wins ?? 0}勝 ${rv.losses ?? 0}敗</div>
       <button id="saveLog" class="mini">💾 記録を保存</button>
     </details>
@@ -1493,7 +1510,7 @@ function earnShareBadge() {
 // 投票タイム：3人の判事の票をスロットで回して、1つずつ止める
 async function voteTime(panel) {
   evt("vote", panel.map((p) => p.vote).join("/"));
-  $("reels").innerHTML = panel.map((p, i) => `<div class="reel spin" id="reel${i}"><small>${p.title}</small><div class="val display">？？？</div><div class="why"></div></div>`).join("");
+  $("reels").innerHTML = panel.map((p, i) => `<div class="reel spin" id="reel${i}"><small>${esc(p.title)}</small><div class="val display">？？？</div><div class="why"></div></div>`).join("");
   $("vote").classList.add("on");
   const names = [...new Set(panel.map((p) => p.vote))];
   const spinners = panel.map((_, i) => setInterval(() => {
@@ -1533,11 +1550,11 @@ async function investigateCall(call) {
     card.className = "ev";
     if (r.image) {
       const url = `data:image/jpeg;base64,${r.image}`;
-      card.innerHTML = `<img src="${url}" alt=""><div>${label}</div>`;
+      card.innerHTML = `<img src="${esc(url)}" alt=""><div>${esc(label)}</div>`;
       evidence.push({ label, dataUrl: url });
       live.send({ realtimeInput: { video: { data: r.image, mimeType: "image/jpeg" } } });
     } else {
-      card.innerHTML = `<div style="padding:6px;text-align:left;font-size:.68rem">🔍 ${r.finding}${r.sources?.length ? `<br><a href="${r.sources[0].url}" target="_blank" style="color:#ffd23f">出典：${r.sources[0].title}</a>` : ""}</div><div>${label}</div>`;
+      card.innerHTML = `<div style="padding:6px;text-align:left;font-size:.68rem">🔍 ${esc(r.finding)}${r.sources?.length && safeUrl(r.sources[0].url) ? `<br><a href="${esc(safeUrl(r.sources[0].url))}" target="_blank" rel="noopener noreferrer" style="color:#ffd23f">出典：${esc(r.sources[0].title)}</a>` : ""}</div><div>${esc(label)}</div>`;
       evidence.push({ label: `${label}（${r.finding}）` });
     }
     $("evidence").append(card);
@@ -1728,7 +1745,7 @@ $("solo").onclick = async () => {
       const shown = Array.from({ length: Math.min(4, pool.length) }, (_, i) => pool[(page * 4 + i) % pool.length]);
       chosen = shown[0];
       $("topicList").innerHTML = shown
-        .map((t, i) => `<button class="topic sub" data-i="${i}"><span><b>${t.motion}</b><small>${t.detail ?? t.background}${t.source ? "（いま話題から）" : t.fresh ? "（AIの新作）" : ""}</small></span></button>`)
+        .map((t, i) => `<button class="topic sub" data-i="${i}"><span><b>${esc(t.motion)}</b><small>${esc(t.detail ?? t.background)}${t.source ? "（いま話題から）" : t.fresh ? "（AIの新作）" : ""}</small></span></button>`)
         .join("");
       $("topicList").querySelectorAll(".topic").forEach((b) => (b.onclick = () => {
         chosen = shown[Number(b.dataset.i)];
@@ -1763,19 +1780,19 @@ $("solo").onclick = async () => {
           })
           .catch(() => (bullets = []));
         rivalInfo = await api("/api/rival", {});
-        rivalInfo.lastResult = rivalInfo.history?.at(-1)?.result;
+        rivalInfo.lastResult = rivalInfo.last;
         startLevel = rivalInfo.level ?? 1;
       } catch {}
       $("topics").style.display = "none";
       // お題は1行。くわしくは開いたときだけ（PCでスクロールが要った 10/16）
-      $("topicCard").innerHTML = `<details><summary><b>お題：${topic.motion}</b> <small>あなたは「${side}」側・くわしく ▾</small></summary><p>${topic.detail ?? topic.background}</p><div class="pc"><span>👍 賛成：${topic.pro ?? "？"}</span><span>👎 反対：${topic.con ?? "？"}</span></div>${topic.source ? `<small>話題のもと：<a href="${topic.source.url}" target="_blank">${topic.source.title}</a></small>` : ""}</details>`;
+      $("topicCard").innerHTML = `<details><summary><b>お題：${esc(topic.motion)}</b> <small>あなたは「${esc(side)}」側・くわしく ▾</small></summary><p>${esc(topic.detail ?? topic.background)}</p><div class="pc"><span>👍 賛成：${esc(topic.pro ?? "？")}</span><span>👎 反対：${esc(topic.con ?? "？")}</span></div>${topic.source && safeUrl(topic.source.url) ? `<small>話題のもと：<a href="${esc(safeUrl(topic.source.url))}" target="_blank" rel="noopener noreferrer">${esc(topic.source.title)}</a></small>` : ""}</details>`;
       $("topicCard").style.display = "block";
       showHintCards();
       shout("あなた VS コン太");
       openCourt(false);
     }));
   } catch (e) {
-    $("topics").innerHTML = `<p>お題を取れませんでした: ${e.message}</p>`;
+    $("topics").innerHTML = `<p>お題を取れませんでした: ${esc(e.message)}</p>`;
   }
 };
 $("resume").onclick = () => openCourt(true);
@@ -1865,7 +1882,7 @@ async function loadRival() {
   try {
     const r = await api("/api/rival", {});
     const n = (r.wins ?? 0) + (r.losses ?? 0) + (r.draws ?? 0);
-    $("rivalLine").textContent = n ? `Lv${r.level}｜あなたの ${r.wins}勝 ${r.losses}敗${r.draws ? ` ${r.draws}分` : ""}${r.history?.at(-1)?.result === "win" ? "（リベンジに燃えている！）" : ""}` : "はじめての対決！";
+    $("rivalLine").textContent = n ? `Lv${r.level}｜あなたの ${r.wins}勝 ${r.losses}敗${r.draws ? ` ${r.draws}分` : ""}${r.last === "win" ? "（リベンジに燃えている！）" : ""}` : "はじめての対決！";
   } catch {}
 }
 loadRival();
