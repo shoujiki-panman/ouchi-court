@@ -3,6 +3,7 @@
 import { Live, Speaker, startMic } from "./live.js";
 import { sfx } from "./sfx.js";
 import { PUNISHMENTS } from "./punishments.js";
+import { addressedParty, selfNamedParty } from "./names.js";
 
 const BAILIFF = `あなたは家庭の法廷「おうち裁判」の書記官タヌ吉です。きょうだいや家族の小さなけんかを、テレビのゲームショーのようにテンション高く、楽しく進行します。相手は5〜10歳の子どもと、その親。
 登場するのは: 原告と被告（子ども）、調査官ホー（フクロウの探偵。investigate で呼ぶ。調べものと再現イラストの係）、原告側の弁護人ポン子、被告側の弁護人コン太（どちらもあなたが声色を変えて演じる。必ず「弁護人ポン子です」「弁護人コン太です」と名乗ってから話す）、証人（見ていた親など）、そして判決を出す裁判長タヌキと3人の判事（別の係。call_judge で呼ぶ）。
@@ -343,7 +344,7 @@ async function openCourt(resume = false) {
   }
   if (!resume) {
     parties.length = 0;
-    lastCalled = "";
+    lastCalled = -1;
     CAST.plaintiff.name = "原告";
     CAST.defendant.name = "被告";
     $("seat-plaintiff").querySelector("span").textContent = "原告";
@@ -477,10 +478,11 @@ async function openCourt(resume = false) {
             heardTurn = "";
           }
           speakingTurn += t;
-          // ふたりで対戦：書記官が呼んだ名前（「ハナさん、どうぞ」など）を、次に話す子どもの手がかりにする
+          // ふたりで対戦：書記官が呼びかけた人（「ハナさん、どうぞ」など）を、次に話す子どもの手がかりにする
+          // 呼びかけだけを数え、「アカさんに」のような言及では動かさない（names.js）
           if (mode !== "solo") {
-            const called = [...speakingTurn.matchAll(/([ァ-ヶーぁ-ん一-龠A-Za-z]{1,8})さん/g)].map((m) => m[1]).filter((n) => parties.includes(n)).pop();
-            if (called) lastCalled = called;
+            const called = addressedParty(speakingTurn, parties);
+            if (called >= 0) lastCalled = called;
           }
           // 名乗ったらその人に切りかえる（文の途中でも）。「コン太、どうぞ」のような呼びかけでは切りかえない
           const tail = speakingTurn.slice(-24);
@@ -1595,16 +1597,17 @@ function showParties() {
   if (who === "plaintiff" || who === "defendant") $("nameplate").textContent = CAST[who].name;
 }
 // 子どもが話したときに光らせる席。ひとりで挑戦は証言台。ふたりで対戦は原告か被告：
-// 発言に名前が入っている → 今の段（原告／被告）→ 直前に書記官が呼んだ名前 → 原告
-let lastCalled = "";
+// 本人の名乗り（「〇〇です」）→ 直前に書記官が呼びかけた人 → 今の段（原告／被告）→ 原告
+// 発言に相手の名前が入っているだけでは動かさない（10/23「アカさんの発言で被告の席が光った」）
+let lastCalled = -1; // 0=原告, 1=被告, -1=まだ呼ばれていない
 function childSeat(text = "") {
   if (mode === "solo") return "witness";
-  if (parties[1] && text.includes(parties[1])) return "defendant";
-  if (parties[0] && text.includes(parties[0])) return "plaintiff";
+  const self = selfNamedParty(text, parties);
+  if (self >= 0) return self === 1 ? "defendant" : "plaintiff";
+  if (lastCalled >= 0) return lastCalled === 1 ? "defendant" : "plaintiff";
   const now = STEPS[stepNow]?.[0];
   if (now === "defendant") return "defendant";
-  if (now === "plaintiff") return "plaintiff";
-  return lastCalled && lastCalled === parties[1] ? "defendant" : "plaintiff";
+  return "plaintiff";
 }
 // 書記官が「〇〇さんですね？」と確かめた名前（聞き違えを本人が直したあとの名前）
 function confirmName(text) {

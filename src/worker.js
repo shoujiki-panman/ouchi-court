@@ -528,9 +528,10 @@ async function penaltyImage(env, { id, who }) {
 }
 
 // 判事の声（24kHz の PCM を base64 で返す）
+// 読み上げるのは判決の本文だけ。指示文を本文につなぐと、その指示まで声になった（10/23 文字起こしで確認）
 async function voice(env, text) {
   const out = await gemini(env, env.JUDGE_TTS_MODEL, {
-    contents: [{ parts: [{ text: `重々しく、ゆっくり、でもどこかおとぼけな裁判官として読み上げて: ${text}` }] }],
+    contents: [{ parts: [{ text: String(text ?? "") }] }],
     generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Gacrux" } } } },
   });
   const part = out.candidates?.[0]?.content?.parts?.find((p) => p.inlineData);
