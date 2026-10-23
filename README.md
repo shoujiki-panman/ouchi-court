@@ -97,3 +97,7 @@ and keep their own terms.
 - Kon-ta / Pon-ko voices: Gemini TTS (pre-recorded lines)
 - Character and courtroom art: generated with FLUX.1 [schnell] on Cloudflare Workers AI
 - Sound effects: synthesized in the browser
+
+## 発表資料
+
+- [おうち裁判 発表資料（PDF）](<slides/おうち裁判 発表資料.pdf>)：BootCamp での発表（2026年10月）
