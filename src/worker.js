@@ -567,6 +567,9 @@ export default {
       if (pathname === "/api/voice") return json(await voice(env, (await request.json()).text));
       if (pathname === "/api/lawyers") return json(await lawyers(env, await request.json()));
       if (pathname === "/api/topics") {
+        // 2026-11-19 UX P0-2: 初めて見る人に「いま話題」のニュース（実在の人物・ゴシップ）が出ないよう、既定は固定のお題だけ。
+        // 戻すには TOPICS_LIVE="1" を環境変数に設定する。
+        if (env.TOPICS_LIVE !== "1") return json({ topics: EVERGREEN });
         // お題づくりは20秒近くかかるので、1時間は作ったものを使い回す（いま話題も数時間単位でしか変わらない）
         const cached = await env.COURT.get("topics", "json");
         if (cached) return json(cached);

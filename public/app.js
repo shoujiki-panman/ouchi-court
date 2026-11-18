@@ -1730,7 +1730,7 @@ $("open").onclick = () => {
 // ひとりで挑戦：お題を選んで、賛成か反対かを決めてから開廷
 $("solo").onclick = async () => {
   $("intro").classList.add("hide");
-  $("topics").innerHTML = "<p>いま話題のお題を探しています…</p>";
+  $("topics").innerHTML = "<p>お題を用意しています…</p>";
   $("topics").style.display = "block";
   try {
     const { topics } = await api("/api/topics");
@@ -1758,8 +1758,8 @@ $("solo").onclick = async () => {
       $("topicList").querySelector(".topic").classList.add("chosen");
     };
     $("topics").innerHTML =
-      `<div class="pickRow"><button id="topicBack" class="mini">← もどる</button><span class="pick">お題をえらんでね</span><button id="shuffle" class="mini">🔀 ほかのお題</button></div><div id="topicList"></div>` +
-      `<div class="sides"><button class="side" data-s="賛成"><span>👍 賛成で戦う</span></button><button class="side sub" data-s="反対"><span>👎 反対で戦う</span></button></div>`;
+      `<div class="pickRow"><button id="topicBack" class="mini">← もどる</button><span class="pick">お題をえらぼう</span><button id="shuffle" class="mini">🔀 ほかのお題</button></div><div id="topicList"></div>` +
+      `<div class="sides"><button class="side" data-s="賛成"><span>👍 賛成</span></button><button class="side sub" data-s="反対"><span>👎 反対</span></button></div>`;
     draw();
     $("topicBack").onclick = () => {
       $("topics").style.display = "none";
