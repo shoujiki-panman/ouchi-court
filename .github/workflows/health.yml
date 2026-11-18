@@ -1,0 +1,25 @@
+name: Production static health
+
+on:
+  schedule:
+    - cron: "17 1 * * *" # 10:17 JST; GitHub may delay scheduled runs.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-static-health
+  cancel-in-progress: false
+
+jobs:
+  static-delivery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Check public page and required static JavaScript
+        run: node scripts/health-check.mjs
