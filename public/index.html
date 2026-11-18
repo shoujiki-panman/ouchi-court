@@ -4,6 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>おうち裁判</title>
+<meta name="description" content="AIの弁護人コン太と、声で言い合う裁判ごっこ。娯楽作品です。判決に法的な効力はありません。">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="おうち裁判">
+<meta property="og:title" content="おうち裁判｜AIの弁護人と声で言い合う">
+<meta property="og:description" content="AIは話す。決めるのはコード。娯楽作品です。判決に法的な効力はありません。">
+<meta property="og:url" content="https://ouchi-court.panman.workers.dev/">
+<meta property="og:image" content="https://ouchi-court.panman.workers.dev/img/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="おうち裁判｜AIの弁護人と声で言い合う">
+<meta name="twitter:description" content="AIは話す。決めるのはコード。娯楽作品です。判決に法的な効力はありません。">
+<meta name="twitter:image" content="https://ouchi-court.panman.workers.dev/img/og.jpg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&display=swap" rel="stylesheet">
 <style>
@@ -263,6 +276,14 @@
   #cam { display: none; margin: 8px 0; }
   #cam video { width: 100%; max-width: 320px; border: 2px solid var(--gold); }
   details { margin-top: 14px; color: var(--muted); font-size: .85rem; }
+  /* UX P0/P1 (2026-11-19) */
+  #intro .about { margin: 0; font-size: .9rem; color: #fff; line-height: 1.5; text-wrap: balance; }
+  #intro .about small { display: block; margin-top: 2px; font-size: .72rem; color: var(--muted); }
+  @media (min-width: 600px) { #intro .about small { display: none; } }
+  #topics .side { white-space: nowrap; padding-left: 10px; padding-right: 10px; }
+  #topics .side > span { white-space: nowrap; }
+  #topics .pickRow .pick { white-space: nowrap; font-size: 1.1rem; }
+  #topicList { padding-bottom: 76px; }
   footer { color: var(--muted); opacity: .6; font-size: .68rem; margin-top: 12px; line-height: 1.4; }
   #pass { display: none; }
   @media (max-width: 560px) {
@@ -417,7 +438,7 @@
     <div id="speed"></div>
     <div id="hero"><img id="heroImg" src="img/judge.jpg" alt=""></div>
     <div id="nameplate" class="display">裁判長タヌキ</div>
-    <div id="box">けんかしたら、開廷。下の「開廷する」を押して、マイクを許可してね。</div>
+    <div id="box">けんかしたら、開廷。「ひとりで挑戦」か「ふたりで対戦」を押して、マイクを許可してね。</div>
     <div id="shout" class="display">論破！</div>
     <div id="cutin"><span class="display">そこ、おかしいよ！</span></div>
     <div id="glass"></div>
@@ -431,6 +452,7 @@
     <div id="paused" class="display">⏸ 一時停止中</div>
     <div id="intro">
       <div class="logo display">おうち裁判</div>
+      <p class="about">AIの弁護人コン太と、<br>声で言い合う裁判ごっこ。<br><small>娯楽作品です。判決に法的な効力はありません。</small></p>
       <div class="rivalCard"><img src="img/lawyerD.png" alt=""><div><b class="display">ライバル コン太</b><span id="rivalLine">はじめての対決！</span></div></div>
       <div id="badgeShelf"></div>
       <button id="solo" class="big display"><span>🎤 ひとりで挑戦</span></button>
@@ -458,7 +480,7 @@
   <div id="evidence"></div>
   <!-- 会話の記録はコードが使うので残す（画面には出さない 10/21） -->
   <pre id="log" style="display:none"></pre>
-  <footer>BGM：魔王魂</footer>
+  <footer>娯楽作品です。判決に法的な効力はありません。<br>BGM：魔王魂</footer>
 </main>
 <script type="module" src="app.js"></script>
 </body>
